@@ -722,6 +722,22 @@ def create_task(
     return _serialize_task(db, task)
 
 
+@router.post("/bulk", status_code=status.HTTP_201_CREATED)
+def create_tasks_bulk(
+    payloads: list[TaskCreate],
+    user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    tasks = [_add_task(db, user, payload) for payload in payloads]
+    db.commit()
+    for task in tasks:
+        db.refresh(task)
+    return {
+        "created_count": len(tasks),
+        "tasks": [_serialize_task(db, task) for task in tasks],
+    }
+
+
 @router.put("/{task_id}")
 def update_task(
     task_id: int,

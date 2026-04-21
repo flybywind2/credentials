@@ -25,6 +25,27 @@ def test_admin_can_update_deadline_and_public_reads_d_day():
     assert "is_closed" in body
 
 
+def test_admin_deadline_alias_supports_trd_get_and_post_paths():
+    client = TestClient(app)
+
+    update_response = client.post(
+        "/api/admin/deadline",
+        json={"input_deadline": "2026-05-15", "description": "TRD alias"},
+        headers={"X-Employee-Id": "admin001"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["input_deadline"] == "2026-05-15"
+
+    read_response = client.get(
+        "/api/admin/deadline",
+        headers={"X-Employee-Id": "admin001"},
+    )
+
+    assert read_response.status_code == 200
+    assert read_response.json()["description"] == "TRD alias"
+
+
 def test_non_admin_cannot_update_deadline():
     client = TestClient(app)
 

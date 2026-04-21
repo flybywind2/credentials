@@ -150,3 +150,17 @@ def test_admin_excel_export_supports_filters():
     assert response.status_code == 200
     rows = parse_workbook(response.content)
     assert rows[0][0:5] == ["실", "팀", "그룹", "파트", "소파트"]
+
+
+def test_admin_excel_export_accepts_approval_status_alias():
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/export/excel?approval_status=DRAFT",
+        headers={"X-Employee-Id": "admin001"},
+    )
+
+    assert response.status_code == 200
+    rows = parse_workbook(response.content)
+    assert len(rows) > 1
+    assert all(row[10] == "DRAFT" for row in rows[1:])

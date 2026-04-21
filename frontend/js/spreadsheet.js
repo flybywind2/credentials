@@ -84,7 +84,52 @@ export function firstErrorRow(errors) {
   return errors.length ? Math.min(...errors.map((error) => error.row_index)) : null;
 }
 
-function renderPreviewRows(rows, groupedErrors) {
+function validPreviewIndexes(rows, groupedErrors) {
+  return new Set(rows.map((_, index) => index).filter((index) => !groupedErrors.has(index)));
+}
+
+export function previewSelectionSummary(rows, groupedErrors, selectedIndexes = new Set()) {
+  const validIndexes = validPreviewIndexes(rows, groupedErrors);
+  return {
+    total: rows.length,
+    valid: validIndexes.size,
+    errorRows: groupedErrors.size,
+    selectedValid: [...selectedIndexes].filter((index) => validIndexes.has(index)).length,
+  };
+}
+
+export function selectedPreviewRows(rows, groupedErrors, selectedIndexes = new Set()) {
+  const validIndexes = validPreviewIndexes(rows, groupedErrors);
+  return rows.filter((_, index) => validIndexes.has(index) && selectedIndexes.has(index));
+}
+
+function allValidPreviewRows(rows, groupedErrors) {
+  const validIndexes = validPreviewIndexes(rows, groupedErrors);
+  return rows.filter((_, index) => validIndexes.has(index));
+}
+
+function renderPreviewSummary(rows, groupedErrors, selectedIndexes) {
+  const summary = previewSelectionSummary(rows, groupedErrors, selectedIndexes);
+  return `
+    <span>전체 ${summary.total}행</span>
+    <span>정상 ${summary.valid}행</span>
+    <span>오류 ${summary.errorRows}행</span>
+    <span>선택 ${summary.selectedValid}행</span>
+  `;
+}
+
+function updatePreviewActions(overlay, rows, groupedErrors, selectedIndexes) {
+  const summary = previewSelectionSummary(rows, groupedErrors, selectedIndexes);
+  overlay.querySelector("[data-preview-summary]").innerHTML = renderPreviewSummary(
+    rows,
+    groupedErrors,
+    selectedIndexes,
+  );
+  overlay.querySelector("[data-action='preview-save-selected']").disabled = summary.selectedValid === 0;
+  overlay.querySelector("[data-action='preview-save-all']").disabled = summary.valid === 0;
+}
+
+function renderPreviewRows(rows, groupedErrors, selectedIndexes = new Set()) {
   if (!rows.length) {
     return `<p class="empty-note">미리보기할 행이 없습니다.</p>`;
   }
@@ -94,6 +139,7 @@ function renderPreviewRows(rows, groupedErrors) {
       <table class="data-table preview-table">
         <thead>
           <tr>
+            <th>선택</th>
             <th>No</th>
             <th>상태</th>
             <th>소파트</th>
@@ -108,6 +154,15 @@ function renderPreviewRows(rows, groupedErrors) {
             const isValid = errors.length === 0;
             return `
               <tr class="${isValid ? "" : "invalid-row"}">
+                <td>
+                  <input
+                    type="checkbox"
+                    data-preview-row-select="${index}"
+                    ${isValid ? "" : "disabled"}
+                    ${isValid && selectedIndexes.has(index) ? "checked" : ""}
+                    aria-label="${index + 1}행 선택"
+                  >
+                </td>
                 <td>${index + 1}</td>
                 <td>${badge(isValid ? "정상" : "오류", isValid ? "neutral" : "danger")}</td>
                 <td>${escapeHtml(row.sub_part || "-")}</td>
@@ -145,19 +200,22 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
           <span>전체 0행</span>
           <span>정상 0행</span>
           <span>오류 0행</span>
+          <span>선택 0행</span>
         </div>
         <div data-preview-result>${renderPreviewRows([], new Map())}</div>
       </div>
       <div class="modal-actions">
         <button type="button" class="secondary-button" data-action="cancel">취소</button>
         <button type="button" class="secondary-button" data-action="preview-validate">미리보기</button>
-        <button type="button" class="primary-button" data-action="preview-save" disabled>정상 행 저장</button>
+        <button type="button" class="secondary-button" data-action="preview-save-selected" disabled>선택 행 저장</button>
+        <button type="button" class="primary-button" data-action="preview-save-all" disabled>전체 정상 행 저장</button>
       </div>
     </section>
   `;
 
   let currentRows = [];
   let currentGroupedErrors = new Map();
+  let selectedIndexes = new Set();
 
   async function validatePreview() {
     const text = overlay.querySelector("#paste-preview-text").value;
@@ -169,15 +227,13 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
       })
       : { errors: [] };
     currentGroupedErrors = groupValidationErrors(result.errors || []);
-    const validCount = currentRows.filter((_, index) => !currentGroupedErrors.has(index)).length;
-    const errorRowCount = currentGroupedErrors.size;
-    overlay.querySelector("[data-preview-summary]").innerHTML = `
-      <span>전체 ${currentRows.length}행</span>
-      <span>정상 ${validCount}행</span>
-      <span>오류 ${errorRowCount}행</span>
-    `;
-    overlay.querySelector("[data-preview-result]").innerHTML = renderPreviewRows(currentRows, currentGroupedErrors);
-    overlay.querySelector("[data-action='preview-save']").disabled = validCount === 0;
+    selectedIndexes = validPreviewIndexes(currentRows, currentGroupedErrors);
+    overlay.querySelector("[data-preview-result]").innerHTML = renderPreviewRows(
+      currentRows,
+      currentGroupedErrors,
+      selectedIndexes,
+    );
+    updatePreviewActions(overlay, currentRows, currentGroupedErrors, selectedIndexes);
   }
 
   overlay.addEventListener("click", async (event) => {
@@ -189,13 +245,34 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
       await validatePreview();
       return;
     }
-    if (event.target.closest("[data-action='preview-save']")) {
-      const validRows = currentRows.filter((_, index) => !currentGroupedErrors.has(index));
+    if (event.target.closest("[data-action='preview-save-selected']")) {
+      const validRows = selectedPreviewRows(currentRows, currentGroupedErrors, selectedIndexes);
+      for (const row of validRows) {
+        await onSaveRows(row);
+      }
+      closePastePreview();
+      return;
+    }
+    if (event.target.closest("[data-action='preview-save-all']")) {
+      const validRows = allValidPreviewRows(currentRows, currentGroupedErrors);
       for (const row of validRows) {
         await onSaveRows(row);
       }
       closePastePreview();
     }
+  });
+  overlay.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-preview-row-select]");
+    if (!checkbox) {
+      return;
+    }
+    const rowIndex = Number(checkbox.dataset.previewRowSelect);
+    if (checkbox.checked) {
+      selectedIndexes.add(rowIndex);
+    } else {
+      selectedIndexes.delete(rowIndex);
+    }
+    updatePreviewActions(overlay, currentRows, currentGroupedErrors, selectedIndexes);
   });
   bindModalAccessibility(overlay, closePastePreview);
 
@@ -266,6 +343,7 @@ async function openExcelPreviewModal(file, orgId, onSaveRows) {
   const result = await response.json();
   const rows = result.rows || [];
   const groupedErrors = groupValidationErrors(result.errors || []);
+  let selectedIndexes = validPreviewIndexes(rows, groupedErrors);
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "paste-preview-modal";
@@ -280,15 +358,14 @@ async function openExcelPreviewModal(file, orgId, onSaveRows) {
       </header>
       <div class="paste-preview-body">
         <div class="preview-summary" data-preview-summary>
-          <span>전체 ${result.total_count || rows.length}행</span>
-          <span>정상 ${result.valid_count || 0}행</span>
-          <span>오류 ${groupedErrors.size}행</span>
+          ${renderPreviewSummary(rows, groupedErrors, selectedIndexes)}
         </div>
-        <div data-preview-result>${renderPreviewRows(rows, groupedErrors)}</div>
+        <div data-preview-result>${renderPreviewRows(rows, groupedErrors, selectedIndexes)}</div>
       </div>
       <div class="modal-actions">
         <button type="button" class="secondary-button" data-action="cancel">취소</button>
-        <button type="button" class="primary-button" data-action="preview-save" ${result.valid_count ? "" : "disabled"}>정상 행 저장</button>
+        <button type="button" class="secondary-button" data-action="preview-save-selected" ${result.valid_count ? "" : "disabled"}>선택 행 저장</button>
+        <button type="button" class="primary-button" data-action="preview-save-all" ${result.valid_count ? "" : "disabled"}>전체 정상 행 저장</button>
       </div>
     </section>
   `;
@@ -297,12 +374,32 @@ async function openExcelPreviewModal(file, orgId, onSaveRows) {
       closePastePreview();
       return;
     }
-    if (event.target.closest("[data-action='preview-save']")) {
-      const validRows = rows.filter((_, index) => !groupedErrors.has(index));
+    if (event.target.closest("[data-action='preview-save-selected']")) {
+      const validRows = selectedPreviewRows(rows, groupedErrors, selectedIndexes);
+      await onSaveRows(validRows);
+      closePastePreview();
+      return;
+    }
+    if (event.target.closest("[data-action='preview-save-all']")) {
+      const validRows = allValidPreviewRows(rows, groupedErrors);
       await onSaveRows(validRows);
       closePastePreview();
     }
   });
+  overlay.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-preview-row-select]");
+    if (!checkbox) {
+      return;
+    }
+    const rowIndex = Number(checkbox.dataset.previewRowSelect);
+    if (checkbox.checked) {
+      selectedIndexes.add(rowIndex);
+    } else {
+      selectedIndexes.delete(rowIndex);
+    }
+    updatePreviewActions(overlay, rows, groupedErrors, selectedIndexes);
+  });
+  updatePreviewActions(overlay, rows, groupedErrors, selectedIndexes);
   bindModalAccessibility(overlay, closePastePreview);
   document.body.append(overlay);
 }

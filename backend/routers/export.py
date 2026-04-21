@@ -25,6 +25,7 @@ def export_tasks_excel(
     group: str | None = None,
     part: str | None = None,
     status: str | None = None,
+    approval_status: str | None = None,
     is_confidential: bool | None = None,
     is_national_tech: bool | None = None,
     is_compliance: bool | None = None,
@@ -41,8 +42,9 @@ def export_tasks_excel(
         query = query.where(Organization.group_name.contains(group))
     if part:
         query = query.where(Organization.part_name.contains(part))
-    if status:
-        query = query.where(TaskEntry.status == status)
+    requested_status = status or approval_status
+    if requested_status:
+        query = query.where(TaskEntry.status == requested_status)
     if is_confidential is not None:
         query = query.where(TaskEntry.is_confidential.is_(is_confidential))
     if is_national_tech is not None:

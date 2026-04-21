@@ -136,6 +136,23 @@ def read_admin_deadline(
     return _serialize_deadline(_setting_row(db))
 
 
+@admin_router.get("/deadline")
+def read_admin_deadline_alias(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    return read_admin_deadline(db, user)
+
+
+def _update_deadline_setting(payload: DeadlineUpdate, db: Session) -> dict:
+    setting = _setting_row(db)
+    setting.input_deadline = payload.input_deadline
+    setting.description = payload.description
+    db.commit()
+    db.refresh(setting)
+    return _serialize_deadline(setting)
+
+
 @admin_router.put("/settings/deadline")
 def update_deadline(
     payload: DeadlineUpdate,
@@ -143,9 +160,14 @@ def update_deadline(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     require_admin(user)
-    setting = _setting_row(db)
-    setting.input_deadline = payload.input_deadline
-    setting.description = payload.description
-    db.commit()
-    db.refresh(setting)
-    return _serialize_deadline(setting)
+    return _update_deadline_setting(payload, db)
+
+
+@admin_router.post("/deadline")
+def update_deadline_alias(
+    payload: DeadlineUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    require_admin(user)
+    return _update_deadline_setting(payload, db)

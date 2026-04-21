@@ -55,6 +55,41 @@ def test_inputter_cannot_create_task_for_other_org():
     assert response.status_code == 403
 
 
+def test_bulk_task_create_uses_same_permissions_and_returns_created_rows():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/tasks/bulk",
+        json=[
+            {
+                "organization_id": 1,
+                "sub_part": "일괄",
+                "major_task": "일괄 대업무 1",
+                "detail_task": "일괄 세부업무 1",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+            {
+                "organization_id": 1,
+                "sub_part": "일괄",
+                "major_task": "일괄 대업무 2",
+                "detail_task": "일괄 세부업무 2",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+        ],
+        headers={"X-Employee-Id": "part001"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["created_count"] == 2
+    assert [task["major_task"] for task in body["tasks"]] == ["일괄 대업무 1", "일괄 대업무 2"]
+
+    for task in body["tasks"]:
+        client.delete(f"/api/tasks/{task['id']}", headers={"X-Employee-Id": "part001"})
+
+
 def test_inputter_cannot_delete_task_created_by_another_user_in_own_org():
     client = TestClient(app)
     created = client.post(

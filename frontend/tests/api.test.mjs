@@ -65,3 +65,19 @@ test("fetchJson sends saved bearer token on API requests", async () => {
   assert.equal(capturedOptions.headers.Authorization, "Bearer signed-token");
   assert.equal(capturedOptions.headers["X-Employee-Id"], "part001");
 });
+
+test("fetchJson explains network failures with single-port guidance", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new TypeError("Failed to fetch");
+  };
+
+  try {
+    await assert.rejects(
+      () => fetchJson("/api/auth/login"),
+      /API 서버에 연결할 수 없습니다.*http:\/\/127\.0\.0\.1:8000\//,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

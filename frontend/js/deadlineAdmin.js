@@ -34,6 +34,9 @@ export async function renderDeadlineManager(container) {
         <label for="input-deadline">입력 마감일
           <input id="input-deadline" name="input_deadline" type="date" value="${escapeHtml(deadline.input_deadline || "")}">
         </label>
+        <label class="wide-deadline-field" for="input-deadline-description">설명
+          <input id="input-deadline-description" name="description" value="${escapeHtml(deadline.description || "")}">
+        </label>
         <button type="submit" class="primary-button">저장</button>
       </form>
     </section>
@@ -42,9 +45,10 @@ export async function renderDeadlineManager(container) {
   container.querySelector(".deadline-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const inputDeadline = event.currentTarget.elements.input_deadline.value || null;
+    const description = event.currentTarget.elements.description.value.trim() || null;
     await fetchJson("/api/admin/settings/deadline", {
       method: "PUT",
-      body: JSON.stringify({ input_deadline: inputDeadline }),
+      body: JSON.stringify({ input_deadline: inputDeadline, description: description }),
     });
     await renderDeadlineManager(container);
   });

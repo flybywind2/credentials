@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { availableRoutesForRole } from "../js/app.js";
 
 test("availableRoutesForRole limits inputters to input workflows", () => {
-  assert.deepEqual(availableRoutesForRole("INPUTTER").map((item) => item.key), ["inputter", "group"]);
+  assert.deepEqual(availableRoutesForRole("INPUTTER").map((item) => item.key), ["inputter", "status", "group"]);
 });
 
 test("availableRoutesForRole gives approvers approval access", () => {
@@ -14,6 +14,6 @@ test("availableRoutesForRole gives approvers approval access", () => {
 test("availableRoutesForRole gives admins every workspace", () => {
   assert.deepEqual(
     availableRoutesForRole("ADMIN").map((item) => item.key),
-    ["inputter", "group", "approver", "admin"],
+    ["inputter", "status", "group", "approver", "admin"],
   );
 });

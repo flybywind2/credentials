@@ -11,6 +11,7 @@ dev.db
 *.db-journal
 logs/
 output/
+test-results/
 
 # Environment and secrets
 .env

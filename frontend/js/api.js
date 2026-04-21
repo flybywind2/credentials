@@ -1,10 +1,21 @@
+export function currentEmployeeId() {
+  try {
+    return globalThis.localStorage?.getItem("credential_employee_id") || "";
+  } catch {
+    return "";
+  }
+}
+
 export async function fetchJson(path, options = {}) {
+  const employeeId = currentEmployeeId();
+  const { headers: optionHeaders = {}, ...requestOptions } = options;
   const response = await fetch(path, {
+    ...requestOptions,
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers || {}),
+      ...(employeeId ? { "X-Employee-Id": employeeId } : {}),
+      ...optionHeaders,
     },
-    ...options,
   });
   if (!response.ok) {
     throw new Error(`${path} 요청 실패: ${response.status}`);

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: credential-config
+  namespace: credential
+  labels:
+    app.kubernetes.io/name: credential-classification
+    app.kubernetes.io/component: web
+data:
+  SSO_MODE: "mock"
+  SMTP_MODE: "disabled"
+  SMTP_PORT: "587"

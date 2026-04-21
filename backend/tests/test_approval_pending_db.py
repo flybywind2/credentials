@@ -12,6 +12,7 @@ def test_pending_approvals_are_filtered_by_current_approver():
     body = response.json()
     assert body
     assert {item["current_approver_employee_id"] for item in body} == {"group001"}
+    assert "requested_at" in body[0]
     assert body[0]["part_name"] == "AI전략실행파트"
 
 

@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: credential-app
+  namespace: credential
+  labels:
+    app.kubernetes.io/name: credential-classification
+    app.kubernetes.io/component: web
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: credential.example.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: credential-app
+                port:
+                  number: 80

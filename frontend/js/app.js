@@ -1,11 +1,13 @@
-import { loadCurrentUser } from "./auth.js?v=20260421-p1b";
+import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260421-p1b";
 import { renderApproval } from "./approval.js?v=20260421-rejected-pin";
 import { renderDashboard } from "./dashboard.js?v=20260421-rejected-pin";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260421-p1b";
+import { renderPartStatus } from "./partStatus.js?v=20260421-spec-complete";
 import { renderSpreadsheet } from "./spreadsheet.js?v=20260421-rejected-pin";
 
 const routes = {
   inputter: renderSpreadsheet,
+  status: renderPartStatus,
   group: renderGroupReadonly,
   approver: renderApproval,
   admin: renderDashboard,
@@ -13,6 +15,7 @@ const routes = {
 
 const routeItems = [
   { key: "inputter", label: "입력자", roles: ["INPUTTER", "ADMIN"] },
+  { key: "status", label: "내 파트 현황", roles: ["INPUTTER", "ADMIN"] },
   { key: "group", label: "그룹 조회", roles: ["INPUTTER", "ADMIN"] },
   { key: "approver", label: "승인자", roles: ["APPROVER", "ADMIN"] },
   { key: "admin", label: "관리자", roles: ["ADMIN"] },
@@ -52,8 +55,42 @@ async function init() {
   const userSummary = document.querySelector("#user-summary");
   const view = document.querySelector("#view");
   const user = await loadCurrentUser();
+  if (!user) {
+    renderLogin(view, userSummary);
+    return;
+  }
   userSummary.textContent = `${user.name} · ${user.role}`;
   await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
+}
+
+function renderLogin(view, userSummary) {
+  userSummary.textContent = "로그인 필요";
+  view.innerHTML = `
+    <section class="login-screen">
+      <form class="login-form" data-login-form>
+        <h2>로그인</h2>
+        <label for="employee-id">사번 ID
+          <input id="employee-id" name="employee_id" value="${savedEmployeeId()}" autocomplete="username" data-storage-key="credential_employee_id" required>
+        </label>
+        <p class="field-error" data-login-error></p>
+        <button type="submit" class="primary-button">SSO 인증</button>
+      </form>
+    </section>
+  `;
+  view.querySelector("[data-login-form]").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const employeeId = event.currentTarget.elements.employee_id.value.trim();
+    const error = view.querySelector("[data-login-error]");
+    error.textContent = "";
+    try {
+      const user = await loginWithEmployeeId(employeeId);
+      userSummary.textContent = `${user.name} · ${user.role}`;
+      await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
+    } catch (loginError) {
+      clearEmployeeId();
+      error.textContent = loginError.message;
+    }
+  });
 }
 
 if (typeof document !== "undefined") {

@@ -9,7 +9,7 @@
 - DB 연결은 `DATABASE_URL`로 전환 가능하며, 기본값은 `sqlite:///./dev.db`이다.
 - MySQL 드라이버는 `PyMySQL`을 사용한다.
 - SSO 설정 모드는 `mock`, `ldap`, `saml`을 지원한다.
-- 현재 LDAP/SAML 어댑터는 설정 검증과 seed 사용자 매핑까지만 수행한다. 실제 AD bind, SAML assertion 검증, 사내 디렉터리 조회는 `backend/services/sso.py`의 어댑터를 교체 또는 확장해야 한다.
+- 현재 LDAP/SAML 어댑터는 설정 검증과 seed 사용자 매핑까지만 수행한다. 실제 AD bind, SAML assertion 검증, 사내 디렉터리 조회는 `backend/services/sso.py`의 어댑터를 사내 IdP 방식에 맞게 교체 또는 확장해야 한다.
 - `/api/auth/me`는 현재 `X-Employee-Id` 헤더를 신뢰한다. 운영에서는 SSO 게이트웨이 뒤에서만 이 헤더를 주입하거나, 백엔드가 직접 token/assertion을 검증하도록 변경해야 한다.
 
 ## 환경 변수
@@ -124,7 +124,7 @@ SAML 방식:
 
 공통:
 
-- 프론트엔드 로그인 화면 `S01`과 backend callback/session 처리가 필요하다.
+- 프론트엔드 로그인 화면 `S01`은 구현되어 있으며, 운영 SAML 방식에서는 backend callback/session 처리를 추가로 연결해야 한다.
 - 운영에서 `mock-token-*`은 사용하지 않는다.
 - reverse proxy가 `X-Employee-Id`를 주입하는 구조라면 외부 요청이 해당 헤더를 직접 보낼 수 없게 차단한다.
 
@@ -177,4 +177,4 @@ python -m pytest backend/tests/test_mysql_compatibility.py backend/tests/test_ss
 - `.env.private-cloud`, DB 비밀번호, SSO client secret은 커밋하지 않는다.
 - 운영 DB 계정은 앱 DB에만 권한을 제한한다.
 - 운영 인증 전환 전에는 `/api/auth/me`와 `X-Employee-Id` 헤더를 신뢰 경계 밖에 노출하지 않는다.
-- 접근 로그와 감사 로그 보관 정책은 운영 배포 전에 별도 정의해야 한다.
+- 접근 로그와 감사 로그 보관 정책은 `docs/operations.md`를 기준으로 적용한다.

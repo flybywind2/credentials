@@ -1,6 +1,7 @@
 import argparse
 
 from sqlalchemy import create_engine
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.database import Base
@@ -34,6 +35,7 @@ def initialize_database(database_url: str = "sqlite:///./dev.db", reset: bool = 
     if reset:
         Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    _ensure_incremental_columns(engine)
 
     session = sessionmaker(bind=engine)()
     try:
@@ -107,6 +109,16 @@ def initialize_database(database_url: str = "sqlite:///./dev.db", reset: bool = 
         raise
     finally:
         session.close()
+
+
+def _ensure_incremental_columns(engine) -> None:
+    inspector = inspect(engine)
+    if "system_settings" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("system_settings")}
+    if "description" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE system_settings ADD COLUMN description TEXT"))
 
 
 def main() -> None:

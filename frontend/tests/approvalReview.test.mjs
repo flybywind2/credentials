@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { validateTaskReviewPayload } from "../js/approval.js";
 
 const tasks = [{ id: 1 }, { id: 2 }];
+const approvalSource = readFileSync(new URL("../js/approval.js", import.meta.url), "utf8");
 
 test("validateTaskReviewPayload requires every task to be reviewed", () => {
   const result = validateTaskReviewPayload(tasks, [{ task_id: 1, decision: "APPROVED", comment: "" }], "approve");
@@ -51,4 +53,10 @@ test("validateTaskReviewPayload accepts a complete rejection review", () => {
   );
 
   assert.equal(result.valid, true);
+});
+
+test("approval detail opens reject reason modal for reviewed rejections", () => {
+  assert.match(approvalSource, /openRejectModal\(approvalId/);
+  assert.match(approvalSource, /task_reviews: taskReviews/);
+  assert.match(approvalSource, /requested_at/);
 });

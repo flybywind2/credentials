@@ -78,6 +78,14 @@ def read_dashboard_summary(
     confidential_count = _count_tasks_where(db, TaskEntry.is_confidential.is_(True))
     national_tech_count = _count_tasks_where(db, TaskEntry.is_national_tech.is_(True))
     compliance_count = _count_tasks_where(db, TaskEntry.is_compliance.is_(True))
+    integrated_count = _count_tasks_where(
+        db,
+        (
+            TaskEntry.is_confidential.is_(True)
+            | TaskEntry.is_national_tech.is_(True)
+            | TaskEntry.is_compliance.is_(True)
+        ),
+    )
     pending_approvals = (
         db.scalar(
             select(func.count(ApprovalRequest.id)).where(
@@ -105,6 +113,9 @@ def read_dashboard_summary(
         else 0.0,
         "national_tech_count": national_tech_count,
         "compliance_count": compliance_count,
+        "integrated_classification_ratio": round((integrated_count / total_tasks) * 100, 1)
+        if total_tasks
+        else 0.0,
         "pending_approvals": pending_approvals,
         "rejected_requests": rejected_requests,
     }
@@ -138,11 +149,20 @@ def read_classification_ratio(
     confidential_count = _count_tasks_where(db, TaskEntry.is_confidential.is_(True))
     national_tech_count = _count_tasks_where(db, TaskEntry.is_national_tech.is_(True))
     compliance_count = _count_tasks_where(db, TaskEntry.is_compliance.is_(True))
+    integrated_count = _count_tasks_where(
+        db,
+        (
+            TaskEntry.is_confidential.is_(True)
+            | TaskEntry.is_national_tech.is_(True)
+            | TaskEntry.is_compliance.is_(True)
+        ),
+    )
     return {
         "total_tasks": total_tasks,
         "confidential": confidential_count,
         "national_tech": national_tech_count,
         "compliance": compliance_count,
+        "integrated": integrated_count,
         "confidential_ratio": round((confidential_count / total_tasks) * 100, 1)
         if total_tasks
         else 0.0,
@@ -150,6 +170,9 @@ def read_classification_ratio(
         if total_tasks
         else 0.0,
         "compliance_ratio": round((compliance_count / total_tasks) * 100, 1)
+        if total_tasks
+        else 0.0,
+        "integrated_ratio": round((integrated_count / total_tasks) * 100, 1)
         if total_tasks
         else 0.0,
     }

@@ -1,7 +1,7 @@
 import pytest
 
 from backend.config import Settings
-from backend.services.email import DisabledEmailService, EmailMessage
+from backend.services.email import DisabledEmailService, EmailMessage, build_approval_email_html
 from backend.services.environment import validate_runtime_settings
 
 
@@ -25,3 +25,12 @@ def test_environment_validation_requires_smtp_settings_when_enabled():
 
     with pytest.raises(ValueError, match="SMTP_HOST"):
         validate_runtime_settings(settings)
+
+
+def test_approval_email_html_template_escapes_content():
+    html = build_approval_email_html("승인 <요청>", "1단계 검토\n사유: <보완>")
+
+    assert "&lt;요청&gt;" in html
+    assert "1단계 검토" in html
+    assert "&lt;보완&gt;" in html
+    assert "<html" in html

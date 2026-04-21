@@ -12,7 +12,7 @@ from backend.database import get_db
 from backend.dependencies import ensure_can_write_org, get_current_user, require_approver_or_admin
 from backend.models import ApprovalRequest, ApprovalStep, ApprovalTaskReview, Organization, TaskEntry, User
 from backend.services.approval_flow import build_approval_path
-from backend.services.email import EmailMessage, employee_email, get_email_service
+from backend.services.email import EmailMessage, build_approval_email_html, employee_email, get_email_service
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 logger = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ def _notify(subject: str, recipients: list[str | None], body: str) -> None:
                 subject=subject,
                 recipients=target_recipients,
                 body=body,
+                html_body=build_approval_email_html(subject, body),
             )
         )
     except Exception:
@@ -77,6 +78,7 @@ def _serialize_request(db: Session, request: ApprovalRequest) -> dict:
         "organization_id": request.organization_id,
         "part_name": org.part_name if org else None,
         "requester": requester.name if requester else None,
+        "requested_at": request.created_at.isoformat() if request.created_at else None,
         "status": request.status,
         "reject_reason": request.reject_reason,
         "current_step": request.current_step,
@@ -174,6 +176,7 @@ def list_pending_approvals(
                 "part_name": org.part_name if org else None,
                 "requester": requester.name if requester else None,
                 "task_count": task_count or 0,
+                "requested_at": request.created_at.isoformat() if request.created_at else None,
                 "current_step": request.current_step,
                 "total_steps": request.total_steps,
                 "status": request.status,

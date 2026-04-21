@@ -22,6 +22,13 @@ function classificationBadge(value, positiveLabel, negativeLabel) {
   return badge(value ? positiveLabel : negativeLabel, value ? "danger" : "neutral");
 }
 
+function formatRequestedAt(value) {
+  if (!value) {
+    return "요청일 -";
+  }
+  return `요청일 ${String(value).replace("T", " ").slice(0, 16)}`;
+}
+
 export function validateTaskReviewPayload(tasks, reviews, action) {
   const taskIds = new Set(tasks.map((task) => Number(task.id)));
   const reviewIds = new Set(reviews.map((review) => Number(review.task_id)));
@@ -160,7 +167,7 @@ function openTaskReadOnlyModal(task) {
   document.body.append(overlay);
 }
 
-function openRejectModal(approvalId, onRejected) {
+function openRejectModal(approvalId, onRejected, taskReviews = [], defaultReason = "") {
   document.querySelector("#reject-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -176,7 +183,7 @@ function openRejectModal(approvalId, onRejected) {
       </header>
       <div class="paste-preview-body">
         <label for="reject-reason">사유
-          <textarea id="reject-reason" name="reject_reason" class="preview-textarea"></textarea>
+          <textarea id="reject-reason" name="reject_reason" class="preview-textarea">${escapeHtml(defaultReason)}</textarea>
           <span class="field-error" data-error-for="reject_reason"></span>
         </label>
       </div>
@@ -200,7 +207,7 @@ function openRejectModal(approvalId, onRejected) {
       }
       await fetchJson(`/api/approvals/${approvalId}/reject`, {
         method: "POST",
-        body: JSON.stringify({ reject_reason: reason }),
+        body: JSON.stringify({ reject_reason: reason, task_reviews: taskReviews }),
       });
       overlay.remove();
       await onRejected();
@@ -237,14 +244,7 @@ async function rejectReviewedApproval(approvalId, container, tasks) {
     renderReviewError(container, validation.message);
     return;
   }
-  await fetchJson(`/api/approvals/${approvalId}/reject`, {
-    method: "POST",
-    body: JSON.stringify({
-      reject_reason: rejectReasonFromReviews(tasks, taskReviews),
-      task_reviews: taskReviews,
-    }),
-  });
-  await renderApproval(container);
+  openRejectModal(approvalId, () => renderApproval(container), taskReviews, rejectReasonFromReviews(tasks, taskReviews));
 }
 
 async function renderApprovalDetail(container, approvalId) {
@@ -257,7 +257,7 @@ async function renderApprovalDetail(container, approvalId) {
         <div>
           <button type="button" class="secondary-button compact-button" data-action="back-to-approvals">목록</button>
           <h2>${escapeHtml(approval.part_name)} 승인 검토</h2>
-          <p>${escapeHtml(approval.requester || "-")} · ${tasks.length}건 · ${approval.status}</p>
+          <p>${escapeHtml(approval.requester || "-")} · ${tasks.length}건 · ${approval.status} · ${formatRequestedAt(approval.requested_at)}</p>
         </div>
         <div class="approval-actions">
           <button type="button" class="secondary-button" data-action="reject-detail">검토 반려</button>
@@ -325,7 +325,7 @@ export async function renderApproval(container) {
           <article class="approval-row" data-approval-id="${approval.id}">
             <div>
               <strong>${escapeHtml(approval.part_name)}</strong>
-              <span>${escapeHtml(approval.requester)} · ${approval.task_count}건</span>
+              <span>${escapeHtml(approval.requester)} · ${approval.task_count}건 · ${formatRequestedAt(approval.requested_at)}</span>
             </div>
             <div class="approval-actions">
               <span class="badge status">${approval.current_step}/${approval.total_steps}</span>

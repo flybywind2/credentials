@@ -30,6 +30,29 @@ export function formatLatestReview(review) {
   };
 }
 
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "ko"));
+}
+
+export function deriveHierarchyOptions(organizations, filters = {}) {
+  const matches = (org, key, value) => !value || org[`${key}_name`] === value;
+  const divisionFiltered = organizations.filter((org) => matches(org, "division", filters.division));
+  const teamFiltered = divisionFiltered.filter((org) => matches(org, "team", filters.team));
+  const groupFiltered = teamFiltered.filter((org) => matches(org, "group", filters.group));
+  return {
+    divisions: uniqueSorted(organizations.map((org) => org.division_name)),
+    teams: uniqueSorted(divisionFiltered.map((org) => org.team_name)),
+    groups: uniqueSorted(teamFiltered.map((org) => org.group_name)),
+    parts: uniqueSorted(groupFiltered.map((org) => org.part_name)),
+  };
+}
+
+function options(values, selectedValue, label) {
+  return `<option value="">${label}</option>${values.map((value) => `
+    <option value="${escapeHtml(value)}" ${value === selectedValue ? "selected" : ""}>${escapeHtml(value)}</option>
+  `).join("")}`;
+}
+
 function renderRows(items) {
   if (!items.length) {
     return `<tr><td colspan="13">조회된 데이터가 없습니다.</td></tr>`;
@@ -59,6 +82,8 @@ function renderRows(items) {
 }
 
 export async function renderAdminTaskQuery(container) {
+  const organizations = await fetchJson("/api/organizations");
+
   async function load(filters = {}) {
     const query = buildTaskFilterQuery(filters);
     const data = await fetchJson(`/api/admin/tasks${query ? `?${query}` : ""}`);
@@ -79,10 +104,10 @@ export async function renderAdminTaskQuery(container) {
         </div>
       </div>
       <form class="admin-query-form">
-        <input class="toolbar-input" name="division" placeholder="실">
-        <input class="toolbar-input" name="team" placeholder="팀">
-        <input class="toolbar-input" name="group" placeholder="그룹">
-        <input class="toolbar-input" name="part" placeholder="파트">
+        <select class="toolbar-input" name="division" data-hierarchy-select="division"></select>
+        <select class="toolbar-input" name="team" data-hierarchy-select="team"></select>
+        <select class="toolbar-input" name="group" data-hierarchy-select="group"></select>
+        <select class="toolbar-input" name="part" data-hierarchy-select="part"></select>
         <select class="toolbar-input" name="status">
           <option value="">전체 상태</option>
           <option value="DRAFT">DRAFT</option>
@@ -123,14 +148,45 @@ export async function renderAdminTaskQuery(container) {
   `;
 
   const form = container.querySelector(".admin-query-form");
+  function currentFilters() {
+    return Object.fromEntries(new FormData(form).entries());
+  }
+
+  function renderHierarchySelects() {
+    const filters = currentFilters();
+    const hierarchy = deriveHierarchyOptions(organizations, filters);
+    form.elements.division.innerHTML = options(hierarchy.divisions, filters.division, "전체 실");
+    form.elements.team.innerHTML = options(hierarchy.teams, filters.team, "전체 팀");
+    form.elements.group.innerHTML = options(hierarchy.groups, filters.group, "전체 그룹");
+    form.elements.part.innerHTML = options(hierarchy.parts, filters.part, "전체 파트");
+  }
+
+  renderHierarchySelects();
+  form.querySelectorAll("[data-hierarchy-select]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const level = select.dataset.hierarchySelect;
+      if (level === "division") {
+        form.elements.team.value = "";
+        form.elements.group.value = "";
+        form.elements.part.value = "";
+      }
+      if (level === "team") {
+        form.elements.group.value = "";
+        form.elements.part.value = "";
+      }
+      if (level === "group") {
+        form.elements.part.value = "";
+      }
+      renderHierarchySelects();
+    });
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const filters = Object.fromEntries(new FormData(form).entries());
-    await load(filters);
+    await load(currentFilters());
   });
   container.querySelector("[data-action='admin-export']").addEventListener("click", () => {
-    const filters = Object.fromEntries(new FormData(form).entries());
-    const query = buildTaskFilterQuery(filters);
+    const query = buildTaskFilterQuery(currentFilters());
     window.location.href = `/api/export/excel${query ? `?${query}` : ""}`;
   });
   await load();

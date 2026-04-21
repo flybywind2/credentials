@@ -50,6 +50,7 @@ class SystemSetting(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     input_deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

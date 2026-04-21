@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js";
+import { currentEmployeeId, fetchJson } from "./api.js";
 import { parseTsvToTasks } from "./clipboard.js";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
@@ -24,6 +24,50 @@ function escapeHtml(value) {
 
 function closePastePreview() {
   document.querySelector("#paste-preview-modal")?.remove();
+}
+
+function closeApprovalConfirm() {
+  document.querySelector("#approval-confirm-modal")?.remove();
+}
+
+function orgIdOf(user) {
+  return Number(user?.organization_id || user?.organization?.id || 1);
+}
+
+function orgPathOf(user) {
+  const organization = user?.organization || {};
+  return [
+    organization.division_name,
+    organization.team_name,
+    organization.group_name,
+    organization.part_name,
+  ].filter(Boolean).join(" / ") || "조직 정보 없음";
+}
+
+function classificationSummary(rows) {
+  return rows.reduce((summary, row) => {
+    const isConfidential = Boolean(row.is_confidential);
+    const isNationalTech = Boolean(row.is_national_tech);
+    const isCompliance = Boolean(row.is_compliance);
+    return {
+      total: summary.total + 1,
+      confidential: summary.confidential + (isConfidential ? 1 : 0),
+      nationalTech: summary.nationalTech + (isNationalTech ? 1 : 0),
+      compliance: summary.compliance + (isCompliance ? 1 : 0),
+      integrated: summary.integrated + (isConfidential || isNationalTech || isCompliance ? 1 : 0),
+    };
+  }, {
+    total: 0,
+    confidential: 0,
+    nationalTech: 0,
+    compliance: 0,
+    integrated: 0,
+  });
+}
+
+function formDataHeaders() {
+  const employeeId = currentEmployeeId();
+  return employeeId ? { "X-Employee-Id": employeeId } : {};
 }
 
 export function groupValidationErrors(errors) {
@@ -79,7 +123,7 @@ function renderPreviewRows(rows, groupedErrors) {
   `;
 }
 
-function openPastePreviewModal(initialText, questions, onSaveRows) {
+function openPastePreviewModal(initialText, questions, organizationId, onSaveRows) {
   closePastePreview();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -117,7 +161,7 @@ function openPastePreviewModal(initialText, questions, onSaveRows) {
 
   async function validatePreview() {
     const text = overlay.querySelector("#paste-preview-text").value;
-    currentRows = parseTsvToTasks(text, questions, { organizationId: 1 });
+    currentRows = parseTsvToTasks(text, questions, { organizationId });
     const result = currentRows.length
       ? await fetchJson("/api/tasks/validate", {
         method: "POST",
@@ -163,6 +207,106 @@ function openPastePreviewModal(initialText, questions, onSaveRows) {
   }
 }
 
+function openApprovalConfirmModal(rows, onConfirm) {
+  closeApprovalConfirm();
+  const summary = classificationSummary(rows);
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "approval-confirm-modal";
+  overlay.innerHTML = `
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="approval-confirm-title">
+      <header class="modal-header">
+        <div>
+          <h2 id="approval-confirm-title">승인 요청 확인</h2>
+          <p>검증이 완료된 현재 파트 데이터를 승인 라인으로 제출합니다.</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
+      </header>
+      <div class="paste-preview-body">
+        <div class="preview-summary">
+          <span>전체 ${summary.total}건</span>
+          <span>기밀 ${summary.confidential}건</span>
+          <span>국가핵심 ${summary.nationalTech}건</span>
+          <span>Compliance ${summary.compliance}건</span>
+          <span>통합판정 ${summary.integrated}건</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-action="cancel">취소</button>
+        <button type="button" class="primary-button" data-action="confirm-approval">승인 요청</button>
+      </div>
+    </section>
+  `;
+  overlay.addEventListener("click", async (event) => {
+    if (event.target === overlay || event.target.closest(".icon-button, [data-action='cancel']")) {
+      closeApprovalConfirm();
+      return;
+    }
+    if (event.target.closest("[data-action='confirm-approval']")) {
+      await onConfirm();
+      closeApprovalConfirm();
+    }
+  });
+  bindModalAccessibility(overlay, closeApprovalConfirm);
+  document.body.append(overlay);
+}
+
+async function openExcelPreviewModal(file, orgId, onSaveRows) {
+  closePastePreview();
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`/api/tasks/import/preview?org_id=${orgId}`, {
+    method: "POST",
+    headers: formDataHeaders(),
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Excel Import 미리보기 실패: ${response.status}`);
+  }
+  const result = await response.json();
+  const rows = result.rows || [];
+  const groupedErrors = groupValidationErrors(result.errors || []);
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "paste-preview-modal";
+  overlay.innerHTML = `
+    <section class="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="excel-preview-title">
+      <header class="modal-header">
+        <div>
+          <h2 id="excel-preview-title">Excel Import 미리보기</h2>
+          <p>파일 내용을 먼저 검증하고 정상 행만 저장합니다.</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
+      </header>
+      <div class="paste-preview-body">
+        <div class="preview-summary" data-preview-summary>
+          <span>전체 ${result.total_count || rows.length}행</span>
+          <span>정상 ${result.valid_count || 0}행</span>
+          <span>오류 ${groupedErrors.size}행</span>
+        </div>
+        <div data-preview-result>${renderPreviewRows(rows, groupedErrors)}</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-action="cancel">취소</button>
+        <button type="button" class="primary-button" data-action="preview-save" ${result.valid_count ? "" : "disabled"}>정상 행 저장</button>
+      </div>
+    </section>
+  `;
+  overlay.addEventListener("click", async (event) => {
+    if (event.target === overlay || event.target.closest(".icon-button, [data-action='cancel']")) {
+      closePastePreview();
+      return;
+    }
+    if (event.target.closest("[data-action='preview-save']")) {
+      const validRows = rows.filter((_, index) => !groupedErrors.has(index));
+      await onSaveRows(validRows);
+      closePastePreview();
+    }
+  });
+  bindModalAccessibility(overlay, closePastePreview);
+  document.body.append(overlay);
+}
+
 function renderRows(tasks, groupedErrors = new Map(), currentUser = null, rejection = null) {
   return tasks.map((task, index) => {
     const rowClasses = [
@@ -171,14 +315,14 @@ function renderRows(tasks, groupedErrors = new Map(), currentUser = null, reject
     ].filter(Boolean).join(" ");
     return `
     <tr data-task-id="${task.id}" data-row-index="${index}" class="${rowClasses}">
-      <td>${index + 1}</td>
+      <td class="sticky-col sticky-no">${index + 1}</td>
       ${[
-        ["sub_part", escapeHtml(task.sub_part || "-")],
-        ["major_task", escapeHtml(task.major_task)],
-        ["detail_task", escapeHtml(task.detail_task)],
-      ].map(([field, value]) => {
+        ["sub_part", escapeHtml(task.sub_part || "-"), "sticky-col sticky-sub-part"],
+        ["major_task", escapeHtml(task.major_task), "sticky-col sticky-major-task"],
+        ["detail_task", escapeHtml(task.detail_task), "sticky-col sticky-detail-task"],
+      ].map(([field, value, stickyClass]) => {
         const hasError = (groupedErrors.get(index) || []).some((error) => error.field === field);
-        return `<td data-field="${field}" class="${hasError ? "cell-error" : ""}">${value}</td>`;
+        return `<td data-field="${field}" class="${stickyClass} ${hasError ? "cell-error" : ""}">${value}</td>`;
       }).join("")}
       <td>${badge(task.is_confidential ? "기밀" : "비기밀", task.is_confidential ? "danger" : "neutral")}</td>
       <td>${badge(task.is_national_tech ? "해당" : "비해당", task.is_national_tech ? "danger" : "neutral")}</td>
@@ -295,14 +439,15 @@ export function canDeleteTask(task, user) {
 }
 
 export async function renderSpreadsheet(container) {
-  const [tasks, questions, tooltipRows, deadline, rejection, partStatus, currentUser] = await Promise.all([
-    fetchJson("/api/tasks"),
+  const currentUser = await fetchJson("/api/auth/me");
+  const orgId = orgIdOf(currentUser);
+  const [tasks, questions, tooltipRows, deadline, rejection, partStatus] = await Promise.all([
+    fetchJson(`/api/tasks?org_id=${orgId}`),
     fetchJson("/api/questions"),
     fetchJson("/api/tooltips"),
     fetchJson("/api/settings/deadline"),
-    fetchJson("/api/tasks/rejection?org_id=1"),
-    fetchJson("/api/tasks/status?org_id=1"),
-    fetchJson("/api/auth/me"),
+    fetchJson(`/api/tasks/rejection?org_id=${orgId}`),
+    fetchJson(`/api/tasks/status?org_id=${orgId}`),
   ]);
   const tooltips = tooltipMap(tooltipRows);
   let showRejectedOnly = false;
@@ -318,10 +463,11 @@ export async function renderSpreadsheet(container) {
       <div class="section-header">
         <div>
           <h2>데이터 입력</h2>
-          <p>파트 업무를 행 단위로 확인하고 상세 내용을 편집합니다.</p>
+          <p>${escapeHtml(orgPathOf(currentUser))}</p>
         </div>
         <div class="toolbar">
           <button type="button" class="secondary-button" data-action="add-row">행 추가</button>
+          <button type="button" class="secondary-button" data-action="save-all">전체 저장</button>
           <button type="button" class="secondary-button" data-action="download-template">양식</button>
           <label class="secondary-button file-button" for="task-excel-import">Excel Import
             <input id="task-excel-import" type="file" accept=".xlsx" data-action="excel-import">
@@ -355,10 +501,10 @@ export async function renderSpreadsheet(container) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>No</th>
-              <th>${headerWithTooltip("소파트", "sub_part", tooltips)}</th>
-              <th>${headerWithTooltip("대업무", "major_task", tooltips)}</th>
-              <th>${headerWithTooltip("세부업무", "detail_task", tooltips)}</th>
+              <th class="sticky-col sticky-no">No</th>
+              <th class="sticky-col sticky-sub-part">${headerWithTooltip("소파트", "sub_part", tooltips)}</th>
+              <th class="sticky-col sticky-major-task">${headerWithTooltip("대업무", "major_task", tooltips)}</th>
+              <th class="sticky-col sticky-detail-task">${headerWithTooltip("세부업무", "detail_task", tooltips)}</th>
               <th>${headerWithTooltip("기밀", "confidential", tooltips)}</th>
               <th>${headerWithTooltip("국가핵심기술", "national_tech", tooltips)}</th>
               <th>${headerWithTooltip("Compliance", "compliance", tooltips)}</th>
@@ -373,21 +519,23 @@ export async function renderSpreadsheet(container) {
   `;
 
   async function saveTask(payload, task = {}) {
+    let savedTask;
     if (task.id) {
-      await fetchJson(`/api/tasks/${task.id}`, {
+      savedTask = await fetchJson(`/api/tasks/${task.id}`, {
         method: "PUT",
         body: JSON.stringify(payload),
       });
     } else {
-      await fetchJson("/api/tasks", {
+      savedTask = await fetchJson("/api/tasks", {
         method: "POST",
         body: JSON.stringify({
-          organization_id: 1,
+          organization_id: orgId,
           ...payload,
         }),
       });
     }
     await renderSpreadsheet(container);
+    return savedTask;
   }
 
   function renderTaskTable(groupedErrors = new Map()) {
@@ -406,12 +554,15 @@ export async function renderSpreadsheet(container) {
   async function savePastedRow(row) {
     await fetchJson("/api/tasks", {
       method: "POST",
-      body: JSON.stringify(row),
+      body: JSON.stringify({
+        organization_id: orgId,
+        ...row,
+      }),
     });
   }
 
   function openClipboardPreview(text = "") {
-    openPastePreviewModal(text, questions, async (row) => {
+    openPastePreviewModal(text, questions, orgId, async (row) => {
       await savePastedRow(row);
       await renderSpreadsheet(container);
     });
@@ -423,6 +574,23 @@ export async function renderSpreadsheet(container) {
 
   container.querySelector("[data-action='paste-preview']").addEventListener("click", () => {
     openClipboardPreview();
+  });
+
+  container.querySelector("[data-action='save-all']").addEventListener("click", async () => {
+    const result = await fetchJson("/api/tasks/validate", {
+      method: "POST",
+      body: JSON.stringify({ rows: tasks.map((task) => ({ ...task, organization_id: orgId })) }),
+    });
+    const errors = result.errors || [];
+    const groupedErrors = groupValidationErrors(errors);
+    renderTaskTable(groupedErrors);
+    container.querySelector("[data-validation-panel]").innerHTML = errors.length
+      ? renderValidationPanel(errors)
+      : `<div class="validation-panel success-panel" role="status"><strong>전체 저장 상태 확인 완료</strong><span>현재 행은 서버에 저장되어 있으며 승인 요청할 수 있습니다.</span></div>`;
+    container.querySelector("[data-action='jump-first-error']")?.addEventListener("click", () => {
+      const rowIndex = firstErrorRow(errors);
+      container.querySelector(`[data-row-index="${rowIndex}"]`)?.scrollIntoView({ block: "center" });
+    });
   });
 
   container.querySelector("[data-action='toggle-rejected-only']")?.addEventListener("click", () => {
@@ -439,22 +607,25 @@ export async function renderSpreadsheet(container) {
     if (!file) {
       return;
     }
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await fetch("/api/tasks/import", { method: "POST", body: formData });
-    if (!response.ok) {
+    try {
+      await openExcelPreviewModal(file, orgId, async (validRows) => {
+        for (const row of validRows) {
+          await savePastedRow(row);
+        }
+        await renderSpreadsheet(container);
+      });
+    } catch (error) {
       container.querySelector("[data-validation-panel]").innerHTML = `
-        <div class="validation-panel" role="alert"><strong>Excel Import 실패</strong><span>${response.status}</span></div>
+        <div class="validation-panel" role="alert"><strong>Excel Import 실패</strong><span>${escapeHtml(error.message)}</span></div>
       `;
-      return;
     }
-    await renderSpreadsheet(container);
+    event.target.value = "";
   });
 
   container.querySelector("[data-action='submit-approval']").addEventListener("click", async () => {
     const result = await fetchJson("/api/tasks/validate", {
       method: "POST",
-      body: JSON.stringify({ rows: tasks }),
+      body: JSON.stringify({ rows: tasks.map((task) => ({ ...task, organization_id: orgId })) }),
     });
     const errors = result.errors || [];
     const groupedErrors = groupValidationErrors(errors);
@@ -467,8 +638,10 @@ export async function renderSpreadsheet(container) {
       });
       return;
     }
-    await fetchJson("/api/approvals/submit?org_id=1", { method: "POST" });
-    await renderSpreadsheet(container);
+    openApprovalConfirmModal(tasks, async () => {
+      await fetchJson(`/api/approvals/submit?org_id=${orgId}`, { method: "POST" });
+      await renderSpreadsheet(container);
+    });
   });
 
   container.addEventListener("paste", (event) => {

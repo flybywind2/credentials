@@ -282,6 +282,7 @@ function validateForm(form) {
 export function openTaskModal(task = {}, onSave, questions = { confidential: [], national_tech: [] }) {
   closeTaskModal();
   const isNew = !task.id;
+  let currentTask = { ...task };
   const confidentialAnswers = answerMap(task, "confidential_answers");
   const nationalTechAnswers = answerMap(task, "national_tech_answers");
 
@@ -362,6 +363,7 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
         </section>
         <div class="modal-actions">
           <button type="button" class="secondary-button" data-action="cancel">취소</button>
+          <button type="button" class="secondary-button" data-action="save-current">저장</button>
           <button type="submit" class="primary-button">저장 후 닫기</button>
         </div>
       </form>
@@ -394,14 +396,27 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
     updateClassificationState(form);
   });
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  async function saveCurrent(closeAfterSave) {
     const payload = validateForm(form);
     if (!payload) {
       return;
     }
-    await onSave?.(payload, task);
-    closeTaskModal();
+    const savedTask = await onSave?.(payload, currentTask);
+    if (savedTask) {
+      currentTask = { ...currentTask, ...savedTask };
+    }
+    if (closeAfterSave) {
+      closeTaskModal();
+    }
+  }
+
+  form.querySelector("[data-action='save-current']").addEventListener("click", async () => {
+    await saveCurrent(false);
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveCurrent(true);
   });
 
   document.body.append(overlay);

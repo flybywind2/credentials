@@ -141,13 +141,48 @@ def _same_group(user: dict, org: Organization | None) -> bool:
 
 
 def _ensure_can_read_task_org(user: dict, org_id: int | None, db: Session) -> None:
-    if org_id is None or user["role"] in {"ADMIN", "APPROVER"}:
+    if org_id is None or user["role"] == "ADMIN":
         return
     if user["organization_id"] == org_id:
+        return
+    org = db.get(Organization, org_id)
+    if user["role"] == "APPROVER" and _is_approver_subordinate(user, org):
         return
     if user["role"] == "INPUTTER" and _same_group(user, db.get(Organization, org_id)):
         return
     raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+
+def _is_approver_subordinate(user: dict, org: Organization | None) -> bool:
+    if org is None:
+        return False
+    employee_id = user["employee_id"]
+    return employee_id in {
+        org.group_head_id,
+        org.team_head_id,
+        org.division_head_id,
+    }
+
+
+def _readable_task_query(user: dict, db: Session):
+    if user["role"] == "ADMIN":
+        return select(TaskEntry)
+    query = select(TaskEntry).join(Organization, Organization.id == TaskEntry.organization_id)
+    if user["role"] == "APPROVER":
+        employee_id = user["employee_id"]
+        return query.where(
+            (Organization.group_head_id == employee_id)
+            | (Organization.team_head_id == employee_id)
+            | (Organization.division_head_id == employee_id)
+        )
+    current_org = db.get(Organization, user["organization_id"])
+    if current_org is None:
+        return query.where(TaskEntry.organization_id == user["organization_id"])
+    if current_org.group_head_id:
+        return query.where(Organization.group_head_id == current_org.group_head_id)
+    if current_org.group_name:
+        return query.where(Organization.group_name == current_org.group_name)
+    return query.where(TaskEntry.organization_id == current_org.id)
 
 
 def _normalize_answers(answers: list[QuestionAnswerInput] | None) -> list[TaskQuestionAnswer]:
@@ -432,7 +467,7 @@ def list_tasks(
     org_id: int | None = None,
 ):
     _ensure_can_read_task_org(user, org_id, db)
-    query = select(TaskEntry)
+    query = _readable_task_query(user, db)
     if org_id is not None:
         query = query.where(TaskEntry.organization_id == org_id)
     return [_serialize_task(db, task) for task in db.scalars(query).all()]
@@ -590,14 +625,35 @@ async def import_tasks_from_excel(
     }
 
 
-@router.post("/validate")
-def validate_tasks(
-    payload: TaskValidationRequest,
+@router.post("/import/preview")
+async def preview_tasks_from_excel(
+    db: Annotated[Session, Depends(get_db)],
     user: Annotated[dict, Depends(get_current_user)],
+    file: UploadFile = File(...),
+    org_id: int | None = None,
 ):
+    target_org_id = org_id or user["organization_id"]
+    ensure_can_write_org(user, target_org_id)
+    raw = await file.read()
+    try:
+        rows = non_empty_rows(parse_workbook(raw))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid Excel workbook") from exc
+
+    confidential, national_tech = _active_questions(db)
+    payloads = _payloads_from_excel_rows(rows, confidential, national_tech, target_org_id)
+    validation_rows = [TaskValidationRow(**payload) for payload in payloads]
+    validation = _validate_task_rows(validation_rows, user)
+    return {
+        "rows": payloads,
+        **validation,
+    }
+
+
+def _validate_task_rows(rows: list[TaskValidationRow], user: dict) -> dict:
     errors = []
     valid_count = 0
-    for index, row in enumerate(payload.rows):
+    for index, row in enumerate(rows):
         row_errors = []
         if row.organization_id is None:
             row_errors.append(("organization_id", "조직 ID는 필수입니다."))
@@ -639,11 +695,19 @@ def validate_tasks(
             valid_count += 1
 
     return {
-        "total_count": len(payload.rows),
+        "total_count": len(rows),
         "valid_count": valid_count,
         "error_count": len(errors),
         "errors": errors,
     }
+
+
+@router.post("/validate")
+def validate_tasks(
+    payload: TaskValidationRequest,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    return _validate_task_rows(payload.rows, user)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

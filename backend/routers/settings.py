@@ -33,6 +33,7 @@ class TooltipUpdate(BaseModel):
 
 class DeadlineUpdate(BaseModel):
     input_deadline: date | None = None
+    description: str | None = None
 
 
 def _tooltip_map(db: Session) -> dict[str, ColumnTooltip]:
@@ -106,6 +107,7 @@ def _serialize_deadline(setting: SystemSetting) -> dict:
     if setting.input_deadline is None:
         return {
             "input_deadline": None,
+            "description": setting.description,
             "today": today.isoformat(),
             "d_day": None,
             "is_closed": False,
@@ -113,6 +115,7 @@ def _serialize_deadline(setting: SystemSetting) -> dict:
     d_day = (setting.input_deadline - today).days
     return {
         "input_deadline": setting.input_deadline.isoformat(),
+        "description": setting.description,
         "today": today.isoformat(),
         "d_day": d_day,
         "is_closed": d_day < 0,
@@ -142,6 +145,7 @@ def update_deadline(
     require_admin(user)
     setting = _setting_row(db)
     setting.input_deadline = payload.input_deadline
+    setting.description = payload.description
     db.commit()
     db.refresh(setting)
     return _serialize_deadline(setting)

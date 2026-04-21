@@ -56,6 +56,16 @@ export function moveQuestionId(ids, questionId, direction) {
   return next;
 }
 
+export function moveQuestionIdBefore(ids, questionId, targetId) {
+  const next = ids.filter((id) => id !== questionId);
+  const targetIndex = next.indexOf(targetId);
+  if (targetIndex < 0 || questionId === targetId) {
+    return ids;
+  }
+  next.splice(targetIndex, 0, questionId);
+  return next;
+}
+
 function renderQuestionList(config, questions) {
   if (!questions.length) {
     return `<p class="empty-note">등록된 판단 항목이 없습니다.</p>`;
@@ -64,7 +74,13 @@ function renderQuestionList(config, questions) {
   return `
     <div class="question-admin-list">
       ${questions.map((question) => `
-        <article class="question-admin-row">
+        <article
+          class="question-admin-row"
+          draggable="true"
+          data-question-row
+          data-question-type="${config.key}"
+          data-question-id="${question.id}"
+        >
           <div>
             <strong>${escapeHtml(question.question_text)}</strong>
             <span>${question.options.map(escapeHtml).join(" · ")}</span>
@@ -101,9 +117,15 @@ function renderQuestionList(config, questions) {
   `;
 }
 
-function renderQuestionPanel(config, questions) {
+function renderQuestionPanel(config, questions, activeKey) {
   return `
-    <section class="question-admin-panel" data-question-panel="${config.key}">
+    <section
+      class="question-admin-panel"
+      data-question-panel="${config.key}"
+      ${config.key === activeKey ? "" : "hidden"}
+      role="tabpanel"
+      aria-labelledby="question-tab-${config.key}"
+    >
       <div class="question-admin-panel-header">
         <div>
           <h3>${config.title}</h3>
@@ -157,12 +179,12 @@ async function createQuestion(container, config, form) {
       options,
     }),
   });
-  await renderQuestionManager(container);
+  await renderQuestionManager(container, config.key);
 }
 
 async function deleteQuestion(container, config, questionId) {
   await fetchJson(`${config.adminPath}/${questionId}`, { method: "DELETE" });
-  await renderQuestionManager(container);
+  await renderQuestionManager(container, config.key);
 }
 
 async function reorderQuestion(container, config, questions, questionId, direction) {
@@ -171,10 +193,23 @@ async function reorderQuestion(container, config, questions, questionId, directi
     method: "PUT",
     body: JSON.stringify({ question_ids: ids }),
   });
-  await renderQuestionManager(container);
+  await renderQuestionManager(container, config.key);
 }
 
-export async function renderQuestionManager(container) {
+async function reorderQuestionDrop(container, config, questions, questionId, targetId) {
+  const ids = moveQuestionIdBefore(
+    questions.map((question) => question.id),
+    Number(questionId),
+    Number(targetId),
+  );
+  await fetchJson(`${config.adminPath}/reorder`, {
+    method: "PUT",
+    body: JSON.stringify({ question_ids: ids }),
+  });
+  await renderQuestionManager(container, config.key);
+}
+
+export async function renderQuestionManager(container, activeKey = QUESTION_CONFIGS[0].key) {
   const questionGroups = await Promise.all(
     QUESTION_CONFIGS.map(async (config) => ({
       config,
@@ -190,11 +225,30 @@ export async function renderQuestionManager(container) {
           <p>기밀 판단 항목과 국가핵심기술 판단 항목을 설정합니다.</p>
         </div>
       </div>
+      <div class="question-admin-tabs" role="tablist" aria-label="판정 문항 유형">
+        ${QUESTION_CONFIGS.map((config) => `
+          <button
+            id="question-tab-${config.key}"
+            type="button"
+            role="tab"
+            aria-selected="${config.key === activeKey}"
+            data-question-tab="${config.key}"
+          >
+            ${config.title}
+          </button>
+        `).join("")}
+      </div>
       <div class="question-admin-grid">
-        ${questionGroups.map(({ config, questions }) => renderQuestionPanel(config, questions)).join("")}
+        ${questionGroups.map(({ config, questions }) => renderQuestionPanel(config, questions, activeKey)).join("")}
       </div>
     </section>
   `;
+
+  container.querySelectorAll("[data-question-tab]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await renderQuestionManager(container, button.dataset.questionTab);
+    });
+  });
 
   container.querySelectorAll("[data-question-form]").forEach((form) => {
     const config = QUESTION_CONFIGS.find((item) => item.key === form.dataset.questionForm);
@@ -221,6 +275,32 @@ export async function renderQuestionManager(container) {
         button.dataset.moveQuestion,
         button.dataset.moveDirection,
       );
+    });
+  });
+
+  container.querySelectorAll("[data-question-row]").forEach((row) => {
+    row.addEventListener("dragstart", (event) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", row.dataset.questionId);
+      event.dataTransfer.setData("application/x-question-type", row.dataset.questionType);
+      row.classList.add("dragging");
+    });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+    });
+    row.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    });
+    row.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      const questionId = event.dataTransfer.getData("text/plain");
+      const questionType = event.dataTransfer.getData("application/x-question-type");
+      if (!questionId || questionType !== row.dataset.questionType) {
+        return;
+      }
+      const group = questionGroups.find(({ config }) => config.key === questionType);
+      await reorderQuestionDrop(container, group.config, group.questions, questionId, row.dataset.questionId);
     });
   });
 }

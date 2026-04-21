@@ -15,6 +15,7 @@ def test_dashboard_summary_uses_database_counts():
     assert summary["total_parts"] == len(orgs)
     assert "pending_approvals" in summary
     assert "confidential_task_ratio" in summary
+    assert "integrated_classification_ratio" in summary
 
 
 def test_dashboard_detail_endpoints_return_database_series():
@@ -31,3 +32,5 @@ def test_dashboard_detail_endpoints_return_database_series():
     assert "items" in completion.json()
     assert "PENDING" in approval.json()
     assert "confidential" in classification.json()
+    assert "integrated" in classification.json()
+    assert "integrated_ratio" in classification.json()

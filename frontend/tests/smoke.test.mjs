@@ -10,3 +10,10 @@ test("frontend shell loads app module and workspace root", () => {
   assert.match(html, /\/js\/app\.js/);
   assert.match(html, /\/css\/style\.css/);
 });
+
+test("app module includes login screen state", () => {
+  const source = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+
+  assert.match(source, /login-form/);
+  assert.match(source, /credential_employee_id/);
+});

@@ -5,10 +5,63 @@ import { renderOrganizationManager } from "./organizationAdmin.js?v=20260421-p1b
 import { renderQuestionManager } from "./questionAdmin.js?v=20260421-p1b";
 import { renderTooltipManager } from "./tooltipAdmin.js?v=20260421-p1b";
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function statusMetricRows(statusCounts) {
   return Object.entries(statusCounts).map(([status, count]) => `
-    <div class="metric"><span>${status}</span><strong>${count}</strong></div>
+    <div class="metric"><span>${escapeHtml(status)}</span><strong>${count}</strong></div>
   `).join("");
+}
+
+export function filterDepartmentItems(items, keyword) {
+  const query = String(keyword || "").trim().toLowerCase();
+  if (!query) {
+    return [...items];
+  }
+  return items.filter((item) => [
+    item.division_name,
+    item.team_name,
+    item.group_name,
+    item.part_name,
+  ].some((value) => String(value || "").toLowerCase().includes(query)));
+}
+
+export function sortDepartmentItems(items, sortKey) {
+  const next = [...items];
+  if (sortKey === "completion_desc") {
+    return next.sort((a, b) => Number(b.completion_rate) - Number(a.completion_rate));
+  }
+  if (sortKey === "completion_asc") {
+    return next.sort((a, b) => Number(a.completion_rate) - Number(b.completion_rate));
+  }
+  return next.sort((a, b) => String(a.part_name || "").localeCompare(String(b.part_name || ""), "ko"));
+}
+
+export function approvalDonutStyle(statusCounts) {
+  const values = [
+    ["PENDING", "#1f6feb"],
+    ["IN_PROGRESS", "#6f42c1"],
+    ["APPROVED", "#1b7f4c"],
+    ["REJECTED", "#c62828"],
+  ];
+  const total = values.reduce((sum, [key]) => sum + Number(statusCounts[key] || 0), 0);
+  if (!total) {
+    return "background: #eceff3";
+  }
+  let cursor = 0;
+  const stops = values.map(([key, color]) => {
+    const start = cursor;
+    cursor += (Number(statusCounts[key] || 0) / total) * 360;
+    return `${color} ${start}deg ${cursor}deg`;
+  });
+  return `background: conic-gradient(${stops.join(", ")})`;
 }
 
 function departmentRows(items) {
@@ -17,15 +70,28 @@ function departmentRows(items) {
   }
   return items.map((item) => `
     <tr>
-      <td>${item.division_name || "-"}</td>
-      <td>${item.team_name || "-"}</td>
-      <td>${item.group_name || "-"}</td>
-      <td>${item.part_name || "-"}</td>
+      <td>${escapeHtml(item.division_name || "-")}</td>
+      <td>${escapeHtml(item.team_name || "-")}</td>
+      <td>${escapeHtml(item.group_name || "-")}</td>
+      <td>${escapeHtml(item.part_name || "-")}</td>
       <td>${item.total_tasks}</td>
       <td>${item.approved_tasks}</td>
       <td>${item.completion_rate}%</td>
     </tr>
   `).join("");
+}
+
+function renderApprovalDonut(statusCounts) {
+  return `
+    <section class="dashboard-chart-section">
+      <div class="approval-donut" style="${approvalDonutStyle(statusCounts)}" aria-label="승인 진행 현황"></div>
+      <div class="donut-legend">
+        ${Object.entries(statusCounts).map(([status, count]) => `
+          <span><i class="legend-dot status-${status.toLowerCase()}"></i>${escapeHtml(status)} ${count}</span>
+        `).join("")}
+      </div>
+    </section>
+  `;
 }
 
 export async function renderDashboard(container) {
@@ -36,6 +102,15 @@ export async function renderDashboard(container) {
     fetchJson("/api/dashboard/completion-rate"),
     fetchJson("/api/dashboard/classification-ratio"),
   ]);
+  let visibleCompletion = sortDepartmentItems(completion.items, "part_asc");
+
+  function updateDepartmentRows() {
+    const keyword = container.querySelector("[data-summary-filter]")?.value || "";
+    const sortKey = container.querySelector("[data-summary-sort]")?.value || "part_asc";
+    visibleCompletion = sortDepartmentItems(filterDepartmentItems(completion.items, keyword), sortKey);
+    container.querySelector("[data-department-summary-body]").innerHTML = departmentRows(visibleCompletion);
+  }
+
   container.innerHTML = `
     <section class="workspace">
       <div class="section-header">
@@ -51,6 +126,7 @@ export async function renderDashboard(container) {
         <div class="metric"><span>완료 파트</span><strong>${summary.completed_parts}</strong></div>
         <div class="metric"><span>입력 완료율</span><strong>${summary.completion_rate}%</strong></div>
         <div class="metric"><span>기밀 업무 비율</span><strong>${summary.confidential_task_ratio}%</strong></div>
+        <div class="metric"><span>통합 비율</span><strong>${summary.integrated_classification_ratio}%</strong></div>
         <div class="metric"><span>국가핵심기술</span><strong>${summary.national_tech_count}</strong></div>
         <div class="metric"><span>Compliance</span><strong>${summary.compliance_count}</strong></div>
       </div>
@@ -59,7 +135,9 @@ export async function renderDashboard(container) {
         <div class="metric"><span>기밀</span><strong>${classification.confidential}</strong></div>
         <div class="metric"><span>국가핵심</span><strong>${classification.national_tech}</strong></div>
         <div class="metric"><span>Compliance</span><strong>${classification.compliance}</strong></div>
+        <div class="metric"><span>통합</span><strong>${classification.integrated}</strong></div>
       </div>
+      ${renderApprovalDonut(approvalStatus)}
       <div class="progress-block">
         <div class="progress-label">
           <span>입력 완료율</span>
@@ -75,13 +153,21 @@ export async function renderDashboard(container) {
             <h2>부서별 요약</h2>
             <p>파트별 업무 수와 승인 완료율입니다.</p>
           </div>
+          <div class="toolbar">
+            <input class="toolbar-input" data-summary-filter placeholder="조직 검색">
+            <select class="toolbar-input" data-summary-sort>
+              <option value="part_asc">파트명</option>
+              <option value="completion_desc">완료율 높은순</option>
+              <option value="completion_asc">완료율 낮은순</option>
+            </select>
+          </div>
         </div>
         <div class="table-wrap compact-table-wrap">
           <table class="compact-table">
             <thead>
               <tr><th>실</th><th>팀</th><th>그룹</th><th>파트</th><th>전체</th><th>승인</th><th>완료율</th></tr>
             </thead>
-            <tbody>${departmentRows(completion.items)}</tbody>
+            <tbody data-department-summary-body>${departmentRows(visibleCompletion)}</tbody>
           </table>
         </div>
       </section>
@@ -95,6 +181,8 @@ export async function renderDashboard(container) {
   container.querySelector("[data-action='dashboard-export']").addEventListener("click", () => {
     window.location.href = "/api/export/excel";
   });
+  container.querySelector("[data-summary-filter]").addEventListener("input", updateDepartmentRows);
+  container.querySelector("[data-summary-sort]").addEventListener("change", updateDepartmentRows);
   await renderDeadlineManager(container.querySelector("#deadline-manager-root"));
   await renderAdminTaskQuery(container.querySelector("#admin-task-query-root"));
   await renderOrganizationManager(container.querySelector("#organization-manager-root"));

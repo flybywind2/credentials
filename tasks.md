@@ -171,3 +171,15 @@
   - [x] pytest 및 frontend node test 검증을 통과했다.
   - [x] 브라우저 검증 스크린샷을 보관했다.
   - [ ] Docker 실행 검증은 현재 실행 환경에 `docker` CLI가 없어 수행하지 못했다.
+
+## 15. PRD/SPEC/TRD 재대조 추가 확인 항목
+
+- [x] `P1` PRD의 “관리자와 승인자가 동일 인물인 경우 허용” 요구를 확인한다. `ADMIN`은 승인자 화면과 승인 API에 접근할 수 있다.
+- [x] `P1` SPEC S08의 승인 상세 행 클릭 시 읽기 전용 상세 팝업을 명시 확인한다.
+- [x] `P1` SPEC S10의 전체 조회 필터를 명시 확인한다: 실/팀/그룹/파트, 승인 상태, 기밀, 국가핵심기술, Compliance 필터.
+- [x] `P1` TRD의 문항 개별 조회 API를 명시 확인한다: `GET /api/questions/confidential`, `GET /api/questions/national-tech`.
+- [x] `P1` TRD의 대시보드 세부 API를 명시 확인한다: `GET /api/dashboard/completion-rate`, `GET /api/dashboard/approval-status`, `GET /api/dashboard/classification-ratio`.
+- [ ] `P1` PRD/SPEC의 S05 Excel/붙여넣기 미리보기 세부 UX를 추가 검증한다: 정상 행 선택 저장, 오류 수정 후 전체 저장, 오류 요약 표시.
+- [ ] `P1` TRD API 설계와 실제 라우터 경로의 호환성을 정리한다: `POST /api/tasks/bulk`, `GET/POST /api/admin/deadline`, export의 `approval_status` 파라미터 alias.
+- [ ] `P2` 이메일 발송을 FastAPI `BackgroundTasks` 또는 비동기 큐로 분리하여 API 응답 지연을 방지한다.
+- [ ] `P2` TRD DB 스키마와 실제 모델의 명명/상태값 편차를 정리한다: `deadline_settings` vs `system_settings`, `approval_steps.WAITING` vs `PENDING`, `task_question_checks.is_not_applicable`.

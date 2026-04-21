@@ -1014,6 +1014,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
+  z-index: 1000;
   display: grid;
   place-items: center;
   padding: 16px;

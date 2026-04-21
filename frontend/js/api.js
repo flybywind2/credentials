@@ -1,3 +1,5 @@
+export const ACCESS_TOKEN_STORAGE_KEY = "credential_access_token";
+
 export function currentEmployeeId() {
   try {
     return globalThis.localStorage?.getItem("credential_employee_id") || "";
@@ -6,13 +8,23 @@ export function currentEmployeeId() {
   }
 }
 
+export function currentAccessToken() {
+  try {
+    return globalThis.localStorage?.getItem(ACCESS_TOKEN_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 export async function fetchJson(path, options = {}) {
   const employeeId = currentEmployeeId();
+  const accessToken = currentAccessToken();
   const { headers: optionHeaders = {}, ...requestOptions } = options;
   const response = await fetch(path, {
     ...requestOptions,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(employeeId ? { "X-Employee-Id": employeeId } : {}),
       ...optionHeaders,
     },

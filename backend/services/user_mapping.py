@@ -1,0 +1,198 @@
+from typing import Any
+
+from fastapi import HTTPException
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
+
+from backend.config import settings
+from backend.models import Organization, User
+from backend.seed import ORGANIZATIONS
+from backend.services.auth_service import get_mock_user
+
+
+ORG_FIELDS = (
+    "id",
+    "division_name",
+    "division_head_name",
+    "division_head_id",
+    "team_name",
+    "team_head_name",
+    "team_head_id",
+    "group_name",
+    "group_head_name",
+    "group_head_id",
+    "part_name",
+    "part_head_name",
+    "part_head_id",
+    "org_type",
+)
+
+
+def _first_value(value: Any) -> Any:
+    if isinstance(value, list | tuple):
+        return value[0] if value else None
+    return value
+
+
+def _display_name(attributes: dict[str, Any], fallback: str) -> str:
+    for key in ("displayName", "name", "cn", "givenName"):
+        value = _first_value(attributes.get(key))
+        if value:
+            return str(value)
+    return fallback
+
+
+def _email(employee_id: str, attributes: dict[str, Any]) -> str:
+    value = _first_value(attributes.get("mail")) or _first_value(attributes.get("email"))
+    return str(value) if value else f"{employee_id}@samsung.com"
+
+
+def _serialize_org(org: Organization | dict[str, Any] | None) -> dict[str, Any] | None:
+    if org is None:
+        return None
+    if isinstance(org, dict):
+        return {field: org.get(field) for field in ORG_FIELDS}
+    return {field: getattr(org, field) for field in ORG_FIELDS}
+
+
+def _first_org(db: Session | None) -> Organization | dict[str, Any] | None:
+    if db is None:
+        return ORGANIZATIONS[0] if ORGANIZATIONS else None
+    return db.scalars(select(Organization).order_by(Organization.id).limit(1)).first()
+
+
+def _admin_ids() -> set[str]:
+    return {
+        value.strip()
+        for value in settings.sso_admin_employee_ids.split(",")
+        if value.strip()
+    }
+
+
+def _user_payload(
+    *,
+    employee_id: str,
+    name: str,
+    role: str,
+    organization: Organization | dict[str, Any] | None,
+    attributes: dict[str, Any],
+    provider: str | None,
+) -> dict[str, Any]:
+    serialized_org = _serialize_org(organization)
+    payload = {
+        "employee_id": employee_id,
+        "name": name,
+        "email": _email(employee_id, attributes),
+        "role": role,
+        "organization_id": serialized_org["id"] if serialized_org else None,
+        "organization": serialized_org,
+    }
+    if provider:
+        payload["sso_provider"] = provider
+    return payload
+
+
+def _resolve_db_user(
+    employee_id: str,
+    db: Session | None,
+    attributes: dict[str, Any],
+    provider: str | None,
+) -> dict[str, Any] | None:
+    if db is None:
+        return None
+
+    user = db.scalar(select(User).where(User.employee_id == employee_id))
+    if user is None:
+        return None
+    organization = db.get(Organization, user.organization_id) if user.organization_id else _first_org(db)
+    return _user_payload(
+        employee_id=employee_id,
+        name=_display_name(attributes, user.name),
+        role=user.role,
+        organization=organization,
+        attributes=attributes,
+        provider=provider,
+    )
+
+
+def _resolve_org_head(
+    employee_id: str,
+    db: Session | None,
+    attributes: dict[str, Any],
+    provider: str | None,
+) -> dict[str, Any] | None:
+    if db is None:
+        return None
+
+    org = db.scalar(
+        select(Organization).where(
+            or_(
+                Organization.part_head_id == employee_id,
+                Organization.group_head_id == employee_id,
+                Organization.team_head_id == employee_id,
+                Organization.division_head_id == employee_id,
+            )
+        )
+    )
+    if org is None:
+        return None
+
+    if org.part_head_id == employee_id:
+        role = "INPUTTER"
+        name = org.part_head_name
+    elif org.group_head_id == employee_id:
+        role = "APPROVER"
+        name = org.group_head_name or employee_id
+    elif org.team_head_id == employee_id:
+        role = "APPROVER"
+        name = org.team_head_name or employee_id
+    else:
+        role = "APPROVER"
+        name = org.division_head_name
+
+    return _user_payload(
+        employee_id=employee_id,
+        name=_display_name(attributes, name),
+        role=role,
+        organization=org,
+        attributes=attributes,
+        provider=provider,
+    )
+
+
+def resolve_app_user(
+    employee_id: str,
+    db: Session | None = None,
+    attributes: dict[str, Any] | None = None,
+    provider: str | None = None,
+) -> dict[str, Any]:
+    directory_attributes = attributes or {}
+
+    db_user = _resolve_db_user(employee_id, db, directory_attributes, provider)
+    if db_user:
+        return db_user
+
+    org_head_user = _resolve_org_head(employee_id, db, directory_attributes, provider)
+    if org_head_user:
+        return org_head_user
+
+    if employee_id in _admin_ids():
+        return _user_payload(
+            employee_id=employee_id,
+            name=_display_name(directory_attributes, "관리자"),
+            role="ADMIN",
+            organization=_first_org(db),
+            attributes=directory_attributes,
+            provider=provider,
+        )
+
+    mock_user = get_mock_user(employee_id)
+    if mock_user:
+        return {
+            **mock_user,
+            "name": _display_name(directory_attributes, mock_user["name"]),
+            "email": _email(employee_id, directory_attributes),
+            **({"sso_provider": provider} if provider else {}),
+        }
+
+    raise HTTPException(status_code=404, detail="Unknown employee_id")

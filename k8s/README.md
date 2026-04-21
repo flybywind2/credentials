@@ -47,8 +47,9 @@ kubectl apply -f k8s/namespace.yaml
 kubectl -n credential create secret generic credential-secrets `
   --from-literal=DATABASE_URL="mysql+pymysql://credential_user:change-me@mysql.internal:3306/credential?charset=utf8mb4" `
   --from-literal=SSO_PROVIDER_URL="ldap://ad.example.internal:389" `
-  --from-literal=SSO_CLIENT_ID="credential-app" `
-  --from-literal=SSO_CLIENT_SECRET="change-me" `
+  --from-literal=SSO_TOKEN_SECRET="change-me-to-random-32-byte-secret" `
+  --from-literal=SSO_LDAP_BIND_DN_TEMPLATE="{employee_id}@example.internal" `
+  --from-literal=SSO_LDAP_SEARCH_BASE="OU=Users,DC=example,DC=internal" `
   --from-literal=SMTP_HOST="smtp.example.internal" `
   --from-literal=SMTP_USERNAME="credential-app@example.internal" `
   --from-literal=SMTP_PASSWORD="change-me"
@@ -76,7 +77,7 @@ data:
   SMTP_PORT: "587"
 ```
 
-`SSO_MODE=ldap` 또는 `saml`이면 `SSO_PROVIDER_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET` secret 값이 필요하다. `SMTP_MODE=smtp`이면 SMTP secret 값이 필요하다.
+`SSO_MODE=ldap`이면 `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, `SSO_LDAP_BIND_DN_TEMPLATE` secret 값이 필요하다. `SSO_MODE=saml`이면 ACS URL, SP entity id, IdP entity id, SSO URL, IdP 인증서, token secret이 필요하다. `SMTP_MODE=smtp`이면 SMTP secret 값이 필요하다.
 
 ## Deploy
 
@@ -142,8 +143,8 @@ kubectl -n credential delete secret credential-secrets
 
 ## Operational Notes
 
-- 실제 SSO 연동은 아직 AD bind/SAML assertion 검증까지 구현된 상태가 아니다. 운영 전 `backend/services/sso.py`를 사내 인증 방식에 맞게 확장한다.
+- LDAP/SAML 인증 코드는 구현되어 있다. 운영 전 사내 IdP URL, 인증서, bind DN, 사용자 속성명, 방화벽/DNS를 실제 클러스터에서 검증한다.
 - 운영에서는 외부 MySQL을 사용하고 `DATABASE_URL`을 secret으로 주입한다.
-- 운영에서 `mock-token-*`과 외부에서 주입 가능한 `X-Employee-Id` 헤더 신뢰 구조를 사용하지 않는다.
+- 운영에서 mock 모드와 외부에서 주입 가능한 `X-Employee-Id` header fallback을 사용하지 않는다.
 - Docker image는 immutable tag를 사용하고, `latest`는 개발/검증 용도로만 사용한다.
 - `secret.example.yaml`의 값은 예시이므로 실제 비밀번호나 client secret으로 교체한 파일을 커밋하지 않는다.

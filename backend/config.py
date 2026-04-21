@@ -9,6 +9,23 @@ class Settings:
     sso_provider_url: str = os.getenv("SSO_PROVIDER_URL", "")
     sso_client_id: str = os.getenv("SSO_CLIENT_ID", "")
     sso_client_secret: str = os.getenv("SSO_CLIENT_SECRET", "")
+    sso_token_secret: str = os.getenv("SSO_TOKEN_SECRET", "")
+    sso_token_expire_minutes: int = int(os.getenv("SSO_TOKEN_EXPIRE_MINUTES", "480"))
+    sso_admin_employee_ids: str = os.getenv("SSO_ADMIN_EMPLOYEE_IDS", "admin001")
+    sso_ldap_bind_dn_template: str = os.getenv("SSO_LDAP_BIND_DN_TEMPLATE", "{employee_id}")
+    sso_ldap_search_base: str = os.getenv("SSO_LDAP_SEARCH_BASE", "")
+    sso_ldap_search_filter: str = os.getenv(
+        "SSO_LDAP_SEARCH_FILTER",
+        "(sAMAccountName={employee_id})",
+    )
+    sso_ldap_employee_attr: str = os.getenv("SSO_LDAP_EMPLOYEE_ATTR", "sAMAccountName")
+    sso_ldap_name_attr: str = os.getenv("SSO_LDAP_NAME_ATTR", "displayName")
+    sso_saml_sp_entity_id: str = os.getenv("SSO_SAML_SP_ENTITY_ID", "")
+    sso_saml_acs_url: str = os.getenv("SSO_SAML_ACS_URL", "")
+    sso_saml_idp_entity_id: str = os.getenv("SSO_SAML_IDP_ENTITY_ID", "")
+    sso_saml_sso_url: str = os.getenv("SSO_SAML_SSO_URL", "")
+    sso_saml_x509_cert: str = os.getenv("SSO_SAML_X509_CERT", "")
+    sso_saml_employee_attr: str = os.getenv("SSO_SAML_EMPLOYEE_ATTR", "employee_id")
     smtp_mode: str = os.getenv("SMTP_MODE", "disabled")
     smtp_host: str = os.getenv("SMTP_HOST", "")
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))

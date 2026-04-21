@@ -60,6 +60,60 @@ spec:
                   name: credential-secrets
                   key: SSO_CLIENT_SECRET
                   optional: true
+            - name: SSO_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_TOKEN_SECRET
+                  optional: true
+            - name: SSO_LDAP_BIND_DN_TEMPLATE
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_LDAP_BIND_DN_TEMPLATE
+                  optional: true
+            - name: SSO_LDAP_SEARCH_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_LDAP_SEARCH_BASE
+                  optional: true
+            - name: SSO_LDAP_SEARCH_FILTER
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_LDAP_SEARCH_FILTER
+                  optional: true
+            - name: SSO_SAML_SP_ENTITY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_SAML_SP_ENTITY_ID
+                  optional: true
+            - name: SSO_SAML_ACS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_SAML_ACS_URL
+                  optional: true
+            - name: SSO_SAML_IDP_ENTITY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_SAML_IDP_ENTITY_ID
+                  optional: true
+            - name: SSO_SAML_SSO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_SAML_SSO_URL
+                  optional: true
+            - name: SSO_SAML_X509_CERT
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: SSO_SAML_X509_CERT
+                  optional: true
             - name: SMTP_HOST
               valueFrom:
                 secretKeyRef:

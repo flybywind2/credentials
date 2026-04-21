@@ -27,7 +27,7 @@ Use `.env.example` as the template for environment-specific values. Do not place
 
 ## Private Cloud Run
 
-Create `.env.private-cloud` outside source control from `.env.example`, then set production values for `DATABASE_URL`, `SSO_MODE`, `SSO_PROVIDER_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SMTP_HOST`, `SMTP_USERNAME`, and `SMTP_PASSWORD`.
+Create `.env.private-cloud` outside source control from `.env.example`, then set production values for `DATABASE_URL`, `SSO_MODE`, `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, the LDAP or SAML mode-specific variables, `SMTP_HOST`, `SMTP_USERNAME`, and `SMTP_PASSWORD`.
 
 Run the private-cloud profile from the repository root:
 
@@ -35,7 +35,7 @@ Run the private-cloud profile from the repository root:
 docker compose -f docker/docker-compose.private-cloud.yml up --build -d
 ```
 
-When `SSO_MODE=ldap` or `SSO_MODE=saml`, startup validates the required SSO environment variables and fails fast with the missing names. See `docs/sso-mysql-setup.md` for the full SSO and MySQL setup guide.
+When `SSO_MODE=ldap` or `SSO_MODE=saml`, startup validates the required SSO environment variables and fails fast with the missing names. LDAP uses `ldap3` bind; SAML uses `python3-saml` ACS validation. See `docs/sso-mysql-setup.md` for the full SSO and MySQL setup guide.
 
 ## Reset Local Data
 

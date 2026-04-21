@@ -1,4 +1,4 @@
-import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260421-p1b";
+import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260422-sso-token";
 import { renderApproval } from "./approval.js?v=20260421-rejected-pin";
 import { renderDashboard } from "./dashboard.js?v=20260421-rejected-pin";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260421-p1b";
@@ -72,6 +72,9 @@ function renderLogin(view, userSummary) {
         <label for="employee-id">사번 ID
           <input id="employee-id" name="employee_id" value="${savedEmployeeId()}" autocomplete="username" data-storage-key="credential_employee_id" required>
         </label>
+        <label for="employee-password">비밀번호
+          <input id="employee-password" name="password" type="password" autocomplete="current-password">
+        </label>
         <p class="field-error" data-login-error></p>
         <button type="submit" class="primary-button">SSO 인증</button>
       </form>
@@ -80,10 +83,11 @@ function renderLogin(view, userSummary) {
   view.querySelector("[data-login-form]").addEventListener("submit", async (event) => {
     event.preventDefault();
     const employeeId = event.currentTarget.elements.employee_id.value.trim();
+    const password = event.currentTarget.elements.password.value;
     const error = view.querySelector("[data-login-error]");
     error.textContent = "";
     try {
-      const user = await loginWithEmployeeId(employeeId);
+      const user = await loginWithEmployeeId(employeeId, password);
       userSummary.textContent = `${user.name} · ${user.role}`;
       await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
     } catch (loginError) {

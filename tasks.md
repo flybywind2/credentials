@@ -4,9 +4,9 @@
 
 ## 현재 상태 요약
 
-- [ ] `spec.md`의 애플리케이션 UI/API 기능은 구현했다. 실제 사내 AD bind/SAML assertion 검증과 운영 부하/Docker 검증은 외부 인프라에서 확인해야 한다.
+- [x] `spec.md`의 애플리케이션 UI/API 기능과 LDAP/SAML 인증 어댑터를 구현했다. 사내 IdP 접속 검증과 운영 부하/Docker 검증은 외부 인프라에서 확인해야 한다.
 - [x] FastAPI 단일 포트 앱, DB 모델, 업무 CRUD, 판정, 승인, 조직/문항/툴팁/마감 관리의 핵심 흐름을 구현했다.
-- [x] 최신 자동 검증을 완료했다: backend pytest 92건 통과, frontend node test 46건 통과.
+- [x] 최신 자동 검증을 완료했다: backend pytest 98건 통과, frontend node test 48건 통과.
 - [x] Chrome DevTools 주요 화면 검증 스크린샷을 `docs/verification/`에 보관했다.
 - [ ] 최종 운영 검증이 남아 있다: 191개 파트/5,000건 데이터 기준 부하 검증, Docker 실제 기동 검증.
 - [ ] `P2` 운영 검증이 남아 있다: 성능 테스트 실행, Docker 실제 기동 검증, 운영 중앙 감사 로그 적재.
@@ -14,7 +14,8 @@
 ## SPEC 감사 결과
 
 - [x] `P0` S01 로그인 화면과 사번 기반 mock SSO 인증 흐름을 구현한다.
-- [ ] `P0` 실제 사내 SSO 연동은 외부 IdP 정보가 필요하다: LDAP bind 또는 SAML assertion 검증, 신뢰 가능한 세션/token 처리, 사용자 디렉터리 매핑.
+- [x] `P0` 실제 사내 SSO 연동 코드를 구현했다: LDAP bind, SAML assertion 검증, bearer token 처리, 사용자/조직/역할 매핑.
+- [ ] `P2` 사내 IdP/AD 실환경 접속 검증은 외부 인프라에서 수행해야 한다.
 - [x] `P0` S06 승인 요청 확인 화면을 구현한다.
 - [x] `P0` S03 스프레드시트 SPEC 정합성을 맞춘다: 파트 정보 표시, 고정 컬럼, 전역 저장 버튼, SPEC 기준 레이아웃.
 - [x] `P1` S05 Excel Import도 미리보기/검증 화면을 거쳐 정상 행만 저장하게 한다.
@@ -47,7 +48,7 @@
 
 - [x] `P0` mock 인증을 사번 기반 로그인 API로 확장한다.
 - [x] `P1` AD/LDAP/SAML SSO 어댑터 인터페이스를 만든다.
-- [ ] `P0` 실제 SSO 연동을 구현한다: LDAP bind 또는 SAML assertion 검증, 신뢰 가능한 세션/token 처리, 사용자 디렉터리 매핑.
+- [x] `P0` 실제 SSO 연동을 구현한다: LDAP bind 또는 SAML assertion 검증, 신뢰 가능한 bearer token 처리, 사용자 디렉터리 매핑.
 - [x] `P0` 서버 사이드 권한 체크를 SPEC과 일치시킨다: 입력자 본인 파트 쓰기, 동일 그룹 읽기, 승인자 산하 조직 읽기, 관리자 전체 읽기/쓰기.
 - [x] `P1` 프론트엔드 역할별 메뉴와 화면 접근 제어를 실제 사용자 권한과 연결한다.
 
@@ -147,7 +148,7 @@
 - [x] `P0` 권한 테스트를 작성한다.
 - [x] `P1` CSV/Excel import/export 테스트를 작성한다.
 - [x] `P1` 프론트엔드 smoke 검증을 자동화한다.
-- [x] `P0` 2026-04-21 기준 backend pytest 92건, frontend node test 46건을 통과했다.
+- [x] `P0` 2026-04-22 기준 backend pytest 98건, frontend node test 48건을 통과했다.
 - [ ] `P2` 동시 접속 100명, 191개 파트, 5,000건 업무 기준 성능 테스트를 수행한다.
 
 ## 13. 배포 및 운영

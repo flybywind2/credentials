@@ -1,15 +1,38 @@
 from typing import Annotated
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.orm import Session
 
-from backend.services.auth_service import get_mock_user
+from backend.config import settings
+from backend.database import get_db
+from backend.services.auth_tokens import verify_access_token
+from backend.services.user_mapping import resolve_app_user
 
 
-def get_current_user(x_employee_id: Annotated[str, Header()] = "admin001") -> dict:
-    user = get_mock_user(x_employee_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="Unknown employee_id")
-    return user
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token
+
+
+def _strip_token_claims(payload: dict) -> dict:
+    return {key: value for key, value in payload.items() if key not in {"iat", "exp"}}
+
+
+def get_current_user(
+    db: Annotated[Session, Depends(get_db)],
+    authorization: Annotated[str | None, Header()] = None,
+    x_employee_id: Annotated[str | None, Header()] = None,
+) -> dict:
+    token = _bearer_token(authorization)
+    if token:
+        return _strip_token_claims(verify_access_token(token))
+    if settings.sso_mode.lower() == "mock":
+        return resolve_app_user(x_employee_id or "admin001", db=db, provider="mock")
+    raise HTTPException(status_code=401, detail="Authentication required")
 
 
 def require_admin(user: dict) -> None:

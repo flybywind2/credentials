@@ -2,6 +2,8 @@
 
 ## Local Container Run
 
+The Docker image is pinned to Python `3.10.19` through `docker/Dockerfile`.
+
 Run the app from the repository root:
 
 ```powershell

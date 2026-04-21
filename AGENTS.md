@@ -13,7 +13,7 @@ Keep implementation files aligned with `trd.md`; update the requirements documen
 
 ## Build, Test, and Development Commands
 
-- `python -m venv .venv`: create a local Python environment.
+- `python -m venv .venv`: create a local Python 3.10.19 environment.
 - `pip install -r backend/requirements.txt`: install backend dependencies.
 - `uvicorn backend.main:app --reload --port 8000`: run API and frontend on one local port.
 - `pytest backend/tests -p no:cacheprovider`: run backend tests against SQLite without pytest cache files.

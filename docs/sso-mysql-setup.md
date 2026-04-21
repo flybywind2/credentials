@@ -105,6 +105,8 @@ docker compose -f docker/docker-compose.private-cloud.yml up --build -d
 
 로컬 Python 실행:
 
+로컬 런타임은 Python `3.10.19` 기준이다. `.python-version`을 지원하는 도구를 쓰면 저장소 진입 시 해당 버전이 자동 선택된다.
+
 ```powershell
 $env:DATABASE_URL="mysql+pymysql://credential_user:change-me@mysql.internal:3306/credential?charset=utf8mb4"
 $env:SSO_MODE="ldap"

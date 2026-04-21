@@ -6,7 +6,7 @@
 
 - [x] `spec.md`의 애플리케이션 UI/API 기능과 LDAP/SAML 인증 어댑터를 구현했다. 사내 IdP 접속 검증과 운영 부하/Docker 검증은 외부 인프라에서 확인해야 한다.
 - [x] FastAPI 단일 포트 앱, DB 모델, 업무 CRUD, 판정, 승인, 조직/문항/툴팁/마감 관리의 핵심 흐름을 구현했다.
-- [x] 최신 자동 검증을 완료했다: backend pytest 98건 통과, frontend node test 48건 통과.
+- [x] 최신 자동 검증을 완료했다: backend pytest 105건 통과, frontend node test 50건 통과.
 - [x] Chrome DevTools 주요 화면 검증 스크린샷을 `docs/verification/`에 보관했다.
 - [ ] 최종 운영 검증이 남아 있다: 191개 파트/5,000건 데이터 기준 부하 검증, Docker 실제 기동 검증.
 - [ ] `P2` 운영 검증이 남아 있다: 성능 테스트 실행, Docker 실제 기동 검증, 운영 중앙 감사 로그 적재.
@@ -148,7 +148,7 @@
 - [x] `P0` 권한 테스트를 작성한다.
 - [x] `P1` CSV/Excel import/export 테스트를 작성한다.
 - [x] `P1` 프론트엔드 smoke 검증을 자동화한다.
-- [x] `P0` 2026-04-22 기준 backend pytest 98건, frontend node test 48건을 통과했다.
+- [x] `P0` 2026-04-22 기준 backend pytest 105건, frontend node test 50건을 통과했다.
 - [ ] `P2` 동시 접속 100명, 191개 파트, 5,000건 업무 기준 성능 테스트를 수행한다.
 
 ## 13. 배포 및 운영
@@ -156,6 +156,7 @@
 - [x] `P0` Docker 실행 경로를 문서화한다.
 - [x] `P1` 사내 프라이빗 클라우드 배포 설정을 분리한다.
 - [x] `P1` 환경 변수 검증을 추가한다.
+- [x] `P1` Python 3.10.19 런타임 기준을 고정하고 3.10 호환성 가드를 추가한다.
 - [x] `P1` 운영 로그 포맷과 에러 핸들링을 정리한다.
 - [x] `P2` 백업/복구, 감사 로그, 접근 로그 보관 정책을 `docs/operations.md`에 정의한다.
 - [ ] `P2` Docker 실제 기동 검증을 수행한다. 현재 실행 환경에는 `docker` CLI가 없어 검증하지 못했다.

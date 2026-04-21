@@ -30,7 +30,7 @@ P0/P1 애플리케이션 기능과 LDAP/SAML 어댑터는 구현되어 있으며
 
 | 영역 | 기술 |
 | --- | --- |
-| Backend | Python, FastAPI, Uvicorn |
+| Backend | Python 3.10.19, FastAPI, Uvicorn |
 | Database | SQLAlchemy, SQLite, MySQL 호환, PyMySQL |
 | Migration | Alembic |
 | Frontend | Vanilla JavaScript, HTML, CSS |
@@ -122,7 +122,9 @@ Invoke-WebRequest `
 
 ## 빠른 시작
 
-### 1. Python 가상환경 생성
+### 1. Python 3.10.19 가상환경 생성
+
+이 저장소의 기준 런타임은 Python `3.10.19`입니다. `.python-version`을 지원하는 도구를 쓰면 해당 버전이 자동 선택됩니다.
 
 ```powershell
 python -m venv .venv
@@ -204,8 +206,8 @@ node --test frontend/tests/approvalReview.test.mjs
 
 현재 확인된 최신 테스트 결과:
 
-- backend: `98 passed`
-- frontend: `48 passed`
+- backend: `105 passed`
+- frontend: `50 passed`
 
 ## 주요 개발 명령어
 

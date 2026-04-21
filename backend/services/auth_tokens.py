@@ -3,7 +3,7 @@ import binascii
 import hashlib
 import hmac
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
@@ -16,10 +16,10 @@ DEFAULT_TOKEN_SECRET = "credential-dev-token-secret"
 
 def _now_utc(now: datetime | None = None) -> datetime:
     if now is None:
-        return datetime.now(UTC)
+        return datetime.now(timezone.utc)
     if now.tzinfo is None:
-        return now.replace(tzinfo=UTC)
-    return now.astimezone(UTC)
+        return now.replace(tzinfo=timezone.utc)
+    return now.astimezone(timezone.utc)
 
 
 def _token_secret(secret: str | None = None) -> str:

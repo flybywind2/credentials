@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import logging
 from typing import Annotated
 
@@ -277,7 +277,7 @@ def approve_request(
     _ensure_can_act(user, step)
     _record_task_reviews(db, request, step, user, payload.task_reviews if payload else [], "approve")
     step.status = "APPROVED"
-    step.acted_at = datetime.now(UTC)
+    step.acted_at = datetime.now(timezone.utc)
 
     if request.current_step >= request.total_steps:
         request.status = "APPROVED"
@@ -345,7 +345,7 @@ def reject_request(
     _record_task_reviews(db, request, step, user, payload.task_reviews, "reject")
     step.status = "REJECTED"
     step.reject_reason = payload.reject_reason
-    step.acted_at = datetime.now(UTC)
+    step.acted_at = datetime.now(timezone.utc)
     request.status = "REJECTED"
     request.reject_reason = payload.reject_reason
 

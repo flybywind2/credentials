@@ -1,0 +1,350 @@
+import { fetchJson } from "./api.js";
+import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function badge(label, tone = "status") {
+  return `<span class="badge ${tone}">${escapeHtml(label)}</span>`;
+}
+
+function statusTone(status) {
+  return `status-${String(status || "draft").toLowerCase()}`;
+}
+
+function classificationBadge(value, positiveLabel, negativeLabel) {
+  return badge(value ? positiveLabel : negativeLabel, value ? "danger" : "neutral");
+}
+
+export function validateTaskReviewPayload(tasks, reviews, action) {
+  const taskIds = new Set(tasks.map((task) => Number(task.id)));
+  const reviewIds = new Set(reviews.map((review) => Number(review.task_id)));
+  if (taskIds.size !== reviewIds.size || [...taskIds].some((taskId) => !reviewIds.has(taskId))) {
+    return { valid: false, message: "모든 항목에 승인 또는 반려를 체크해 주세요." };
+  }
+  if (reviews.some((review) => !["APPROVED", "REJECTED"].includes(review.decision))) {
+    return { valid: false, message: "모든 항목에 승인 또는 반려를 체크해 주세요." };
+  }
+  if (action === "approve" && reviews.some((review) => review.decision !== "APPROVED")) {
+    return { valid: false, message: "최종 승인하려면 모든 항목이 승인으로 체크되어야 합니다." };
+  }
+  const rejectedReviews = reviews.filter((review) => review.decision === "REJECTED");
+  if (action === "reject" && rejectedReviews.length === 0) {
+    return { valid: false, message: "반려하려면 최소 1개 항목을 반려로 체크해 주세요." };
+  }
+  if (rejectedReviews.some((review) => !String(review.comment || "").trim())) {
+    return { valid: false, message: "반려 항목에는 의견을 입력해 주세요." };
+  }
+  return { valid: true, message: "" };
+}
+
+function renderReviewControls(task) {
+  return `
+    <div class="review-choice-group" role="radiogroup" aria-label="${escapeHtml(task.major_task)} 검토 결과">
+      <label>
+        <input type="radio" name="task-review-${task.id}" value="APPROVED" checked>
+        승인
+      </label>
+      <label>
+        <input type="radio" name="task-review-${task.id}" value="REJECTED">
+        반려
+      </label>
+    </div>
+  `;
+}
+
+function renderTaskRows(tasks, reviewMode = false) {
+  if (!tasks.length) {
+    return `<tr><td colspan="${reviewMode ? 10 : 8}">조회된 업무가 없습니다.</td></tr>`;
+  }
+
+  return tasks.map((task, index) => `
+    <tr data-task-id="${task.id}" ${reviewMode ? "data-task-review-row" : ""}>
+      <td>${index + 1}</td>
+      ${reviewMode ? `<td>${renderReviewControls(task)}</td>` : ""}
+      ${reviewMode ? `<td><textarea id="task-review-comment-${task.id}" name="task_review_comment_${task.id}" class="review-comment" data-review-comment="${task.id}" aria-label="${escapeHtml(task.major_task)} 검토 의견" placeholder="반려 시 의견 필수"></textarea></td>` : ""}
+      <td>${escapeHtml(task.sub_part || "-")}</td>
+      <td>${escapeHtml(task.major_task)}</td>
+      <td>${escapeHtml(task.detail_task)}</td>
+      <td>${classificationBadge(task.is_confidential, "기밀", "비기밀")}</td>
+      <td>${classificationBadge(task.is_national_tech, "해당", "비해당")}</td>
+      <td>${badge(task.is_compliance ? "해당" : "비해당", task.is_compliance ? "warning" : "neutral")}</td>
+      <td>${badge(task.status, statusTone(task.status))}</td>
+    </tr>
+  `).join("");
+}
+
+function collectTaskReviews(container) {
+  return Array.from(container.querySelectorAll("[data-task-review-row]")).map((row) => {
+    const taskId = Number(row.dataset.taskId);
+    return {
+      task_id: taskId,
+      decision: row.querySelector(`input[name="task-review-${taskId}"]:checked`)?.value || "",
+      comment: row.querySelector(`[data-review-comment="${taskId}"]`)?.value.trim() || "",
+    };
+  });
+}
+
+function renderReviewError(container, message) {
+  container.querySelector("[data-review-error]").innerHTML = message
+    ? `<div class="validation-panel" role="alert"><strong>검토 오류</strong><span>${escapeHtml(message)}</span></div>`
+    : "";
+}
+
+function rejectReasonFromReviews(tasks, reviews) {
+  return reviews
+    .filter((review) => review.decision === "REJECTED")
+    .map((review) => {
+      const task = tasks.find((item) => Number(item.id) === Number(review.task_id));
+      return `${task?.major_task || review.task_id}: ${review.comment}`;
+    })
+    .join("\n");
+}
+
+function renderTimeline(approval) {
+  return `
+    <ol class="approval-timeline">
+      ${approval.steps.map((step) => `
+        <li class="timeline-item ${step.status.toLowerCase()}">
+          <strong>${step.step_order}. ${escapeHtml(step.approver_role)}</strong>
+          <span>${escapeHtml(step.approver_name)} · ${escapeHtml(step.status)}</span>
+        </li>
+      `).join("")}
+    </ol>
+  `;
+}
+
+function openTaskReadOnlyModal(task) {
+  document.querySelector("#readonly-task-modal")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "readonly-task-modal";
+  overlay.innerHTML = `
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="readonly-task-title">
+      <header class="modal-header">
+        <div>
+          <h2 id="readonly-task-title">${escapeHtml(task.major_task)}</h2>
+          <p>${escapeHtml(task.detail_task)}</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
+      </header>
+      <div class="readonly-grid">
+        <div><span>소파트</span><strong>${escapeHtml(task.sub_part || "-")}</strong></div>
+        <div><span>기밀</span><strong>${task.is_confidential ? "기밀" : "비기밀"}</strong></div>
+        <div><span>기밀 데이터 유형</span><strong>${escapeHtml(task.conf_data_type || "-")}</strong></div>
+        <div><span>기밀 소유자/사용자</span><strong>${escapeHtml(task.conf_owner_user || "-")}</strong></div>
+        <div><span>국가핵심기술</span><strong>${task.is_national_tech ? "해당" : "비해당"}</strong></div>
+        <div><span>국가핵심기술 데이터 유형</span><strong>${escapeHtml(task.ntech_data_type || "-")}</strong></div>
+        <div><span>Compliance</span><strong>${task.is_compliance ? "해당" : "비해당"}</strong></div>
+        <div><span>Compliance 데이터 유형</span><strong>${escapeHtml(task.comp_data_type || "-")}</strong></div>
+        <div><span>보관 장소</span><strong>${escapeHtml(task.storage_location || "-")}</strong></div>
+        <div><span>관련 메뉴</span><strong>${escapeHtml(task.related_menu || "-")}</strong></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-action="cancel">닫기</button>
+      </div>
+    </section>
+  `;
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest(".icon-button, [data-action='cancel']")) {
+      overlay.remove();
+    }
+  });
+  bindModalAccessibility(overlay, () => overlay.remove());
+  document.body.append(overlay);
+}
+
+function openRejectModal(approvalId, onRejected) {
+  document.querySelector("#reject-modal")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "reject-modal";
+  overlay.innerHTML = `
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="reject-title">
+      <header class="modal-header">
+        <div>
+          <h2 id="reject-title">반려 사유</h2>
+          <p>입력자가 수정할 수 있도록 사유를 남깁니다.</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
+      </header>
+      <div class="paste-preview-body">
+        <label for="reject-reason">사유
+          <textarea id="reject-reason" name="reject_reason" class="preview-textarea"></textarea>
+          <span class="field-error" data-error-for="reject_reason"></span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-action="cancel">취소</button>
+        <button type="button" class="primary-button" data-action="confirm-reject">반려</button>
+      </div>
+    </section>
+  `;
+  overlay.addEventListener("click", async (event) => {
+    if (event.target === overlay || event.target.closest(".icon-button, [data-action='cancel']")) {
+      overlay.remove();
+      return;
+    }
+    if (event.target.closest("[data-action='confirm-reject']")) {
+      const reason = overlay.querySelector("#reject-reason").value.trim();
+      const error = overlay.querySelector("[data-error-for='reject_reason']");
+      if (!reason) {
+        error.textContent = "반려 사유는 필수입니다.";
+        return;
+      }
+      await fetchJson(`/api/approvals/${approvalId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reject_reason: reason }),
+      });
+      overlay.remove();
+      await onRejected();
+    }
+  });
+  bindModalAccessibility(overlay, () => overlay.remove());
+  document.body.append(overlay);
+  overlay.querySelector("#reject-reason").focus();
+}
+
+async function approveApproval(approvalId, container) {
+  await fetchJson(`/api/approvals/${approvalId}/approve`, { method: "POST" });
+  await renderApproval(container);
+}
+
+async function approveReviewedApproval(approvalId, container, tasks) {
+  const taskReviews = collectTaskReviews(container);
+  const validation = validateTaskReviewPayload(tasks, taskReviews, "approve");
+  if (!validation.valid) {
+    renderReviewError(container, validation.message);
+    return;
+  }
+  await fetchJson(`/api/approvals/${approvalId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ task_reviews: taskReviews }),
+  });
+  await renderApproval(container);
+}
+
+async function rejectReviewedApproval(approvalId, container, tasks) {
+  const taskReviews = collectTaskReviews(container);
+  const validation = validateTaskReviewPayload(tasks, taskReviews, "reject");
+  if (!validation.valid) {
+    renderReviewError(container, validation.message);
+    return;
+  }
+  await fetchJson(`/api/approvals/${approvalId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({
+      reject_reason: rejectReasonFromReviews(tasks, taskReviews),
+      task_reviews: taskReviews,
+    }),
+  });
+  await renderApproval(container);
+}
+
+async function renderApprovalDetail(container, approvalId) {
+  const approval = await fetchJson(`/api/approvals/${approvalId}/history`);
+  const tasks = await fetchJson(`/api/tasks?org_id=${approval.organization_id}`);
+
+  container.innerHTML = `
+    <section class="workspace">
+      <div class="section-header">
+        <div>
+          <button type="button" class="secondary-button compact-button" data-action="back-to-approvals">목록</button>
+          <h2>${escapeHtml(approval.part_name)} 승인 검토</h2>
+          <p>${escapeHtml(approval.requester || "-")} · ${tasks.length}건 · ${approval.status}</p>
+        </div>
+        <div class="approval-actions">
+          <button type="button" class="secondary-button" data-action="reject-detail">검토 반려</button>
+          <button type="button" class="primary-button" data-action="approve-detail">검토 승인</button>
+        </div>
+      </div>
+      <div class="approval-detail">
+        ${renderTimeline(approval)}
+      </div>
+      <div data-review-error></div>
+      <div class="table-wrap">
+        <table class="data-table review-table">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>검토</th>
+              <th>의견</th>
+              <th>소파트</th>
+              <th>대업무</th>
+              <th>세부업무</th>
+              <th>기밀</th>
+              <th>국가핵심기술</th>
+              <th>Compliance</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody>${renderTaskRows(tasks, true)}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  container.querySelector("[data-action='back-to-approvals']").addEventListener("click", () => {
+    renderApproval(container);
+  });
+  container.querySelector("[data-action='approve-detail']").addEventListener("click", () => {
+    approveReviewedApproval(approvalId, container, tasks);
+  });
+  container.querySelector("[data-action='reject-detail']").addEventListener("click", () => {
+    rejectReviewedApproval(approvalId, container, tasks);
+  });
+  container.querySelectorAll("tbody tr[data-task-id]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("input, textarea, label, button")) {
+        return;
+      }
+      const task = tasks.find((item) => String(item.id) === row.dataset.taskId);
+      openTaskReadOnlyModal(task);
+    });
+  });
+}
+
+export async function renderApproval(container) {
+  const approvals = await fetchJson("/api/approvals/pending");
+  container.innerHTML = `
+    <section class="workspace">
+      <div class="section-header">
+        <div>
+          <h2>승인 대기 목록</h2>
+          <p>내 승인 차례인 파트 단위 요청을 검토합니다.</p>
+        </div>
+      </div>
+      <div class="approval-list">
+        ${approvals.length ? approvals.map((approval) => `
+          <article class="approval-row" data-approval-id="${approval.id}">
+            <div>
+              <strong>${escapeHtml(approval.part_name)}</strong>
+              <span>${escapeHtml(approval.requester)} · ${approval.task_count}건</span>
+            </div>
+            <div class="approval-actions">
+              <span class="badge status">${approval.current_step}/${approval.total_steps}</span>
+              <button type="button" class="primary-button" data-action="open-detail">검토</button>
+            </div>
+          </article>
+        `).join("") : `<p class="empty-note">승인 대기 건이 없습니다.</p>`}
+      </div>
+    </section>
+  `;
+
+  container.querySelectorAll("[data-approval-id]").forEach((row) => {
+    const approvalId = row.dataset.approvalId;
+    row.addEventListener("click", () => {
+      renderApprovalDetail(container, approvalId);
+    });
+    row.querySelector("[data-action='open-detail']").addEventListener("click", (event) => {
+      event.stopPropagation();
+      renderApprovalDetail(container, approvalId);
+    });
+  });
+}

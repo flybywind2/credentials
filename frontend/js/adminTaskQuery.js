@@ -1,0 +1,137 @@
+import { fetchJson } from "./api.js";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+export function buildTaskFilterQuery(filters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== "" && value !== null && value !== undefined) {
+      params.set(key, value);
+    }
+  });
+  return params.toString();
+}
+
+export function formatLatestReview(review) {
+  if (!review) {
+    return { decision: "-", comment: "-", reviewer: "-" };
+  }
+  return {
+    decision: review.decision === "REJECTED" ? "반려" : "승인",
+    comment: review.comment || "-",
+    reviewer: review.reviewer_employee_id || "-",
+  };
+}
+
+function renderRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="13">조회된 데이터가 없습니다.</td></tr>`;
+  }
+  return items.map((task) => `
+    ${(() => {
+      const review = formatLatestReview(task.latest_review);
+      return `
+    <tr>
+      <td>${escapeHtml(task.division_name || "-")}</td>
+      <td>${escapeHtml(task.team_name || "-")}</td>
+      <td>${escapeHtml(task.group_name || "-")}</td>
+      <td>${escapeHtml(task.part_name || "-")}</td>
+      <td>${escapeHtml(task.major_task)}</td>
+      <td>${escapeHtml(task.detail_task)}</td>
+      <td>${task.is_confidential ? "기밀" : "비기밀"}</td>
+      <td>${task.is_national_tech ? "해당" : "비해당"}</td>
+      <td>${task.is_compliance ? "해당" : "비해당"}</td>
+      <td><span class="badge status-${String(task.status).toLowerCase()}">${escapeHtml(task.status)}</span></td>
+      <td>${escapeHtml(review.decision)}</td>
+      <td>${escapeHtml(review.comment)}</td>
+      <td>${escapeHtml(review.reviewer)}</td>
+    </tr>
+      `;
+    })()}
+  `).join("");
+}
+
+export async function renderAdminTaskQuery(container) {
+  async function load(filters = {}) {
+    const query = buildTaskFilterQuery(filters);
+    const data = await fetchJson(`/api/admin/tasks${query ? `?${query}` : ""}`);
+    container.querySelector("[data-admin-task-results]").innerHTML = renderRows(data.items);
+    container.querySelector("[data-admin-task-count]").textContent = `${data.total_count}건`;
+  }
+
+  container.innerHTML = `
+    <section class="admin-query-section">
+      <div class="section-header admin-query-header">
+        <div>
+          <h2>전체 데이터 조회</h2>
+          <p>조직, 승인 상태, 판정 결과 기준으로 전체 업무를 조회합니다.</p>
+        </div>
+        <div class="toolbar">
+          <span class="badge neutral" data-admin-task-count>0건</span>
+          <button type="button" class="secondary-button" data-action="admin-export">Excel</button>
+        </div>
+      </div>
+      <form class="admin-query-form">
+        <input class="toolbar-input" name="division" placeholder="실">
+        <input class="toolbar-input" name="team" placeholder="팀">
+        <input class="toolbar-input" name="group" placeholder="그룹">
+        <input class="toolbar-input" name="part" placeholder="파트">
+        <select class="toolbar-input" name="status">
+          <option value="">전체 상태</option>
+          <option value="DRAFT">DRAFT</option>
+          <option value="SUBMITTED">SUBMITTED</option>
+          <option value="APPROVED">APPROVED</option>
+          <option value="REJECTED">REJECTED</option>
+        </select>
+        <select class="toolbar-input" name="is_confidential">
+          <option value="">기밀 전체</option>
+          <option value="true">기밀</option>
+          <option value="false">비기밀</option>
+        </select>
+        <select class="toolbar-input" name="is_national_tech">
+          <option value="">국가핵심 전체</option>
+          <option value="true">해당</option>
+          <option value="false">비해당</option>
+        </select>
+        <select class="toolbar-input" name="is_compliance">
+          <option value="">Compliance 전체</option>
+          <option value="true">해당</option>
+          <option value="false">비해당</option>
+        </select>
+        <button type="submit" class="primary-button">조회</button>
+      </form>
+      <div class="table-wrap compact-table-wrap">
+        <table class="compact-table admin-query-table">
+          <thead>
+            <tr>
+              <th>실</th><th>팀</th><th>그룹</th><th>파트</th>
+              <th>대업무</th><th>세부업무</th><th>기밀</th><th>국가핵심</th><th>Compliance</th><th>상태</th>
+              <th>검토결과</th><th>검토의견</th><th>검토자</th>
+            </tr>
+          </thead>
+          <tbody data-admin-task-results></tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  const form = container.querySelector(".admin-query-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const filters = Object.fromEntries(new FormData(form).entries());
+    await load(filters);
+  });
+  container.querySelector("[data-action='admin-export']").addEventListener("click", () => {
+    const filters = Object.fromEntries(new FormData(form).entries());
+    const query = buildTaskFilterQuery(filters);
+    window.location.href = `/api/export/excel${query ? `?${query}` : ""}`;
+  });
+  await load();
+}

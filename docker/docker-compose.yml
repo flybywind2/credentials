@@ -1,0 +1,11 @@
+services:
+  credential-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:///./dev.db
+      SSO_MODE: mock
+      SMTP_MODE: disabled
+    ports:
+      - "8000:8000"

@@ -1,0 +1,18 @@
+from fastapi.testclient import TestClient
+
+from backend.main import app
+
+
+def test_root_serves_frontend_html():
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "기밀분류시스템" in response.text
+    assert "/assets/favicon.svg" in response.text
+
+
+def test_favicon_asset_is_served():
+    client = TestClient(app)
+    response = client.get("/assets/favicon.svg")
+    assert response.status_code == 200
+    assert "image/svg+xml" in response.headers["content-type"]

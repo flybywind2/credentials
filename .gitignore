@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*
+pytest-cache-files-*/
+
+# Local databases and runtime state
+dev.db
+*.sqlite
+*.sqlite3
+*.db-journal
+logs/
+output/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local tooling and dependencies
+.venv/
+venv/
+node_modules/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.playwright-cli/
+.playwright-mcp/

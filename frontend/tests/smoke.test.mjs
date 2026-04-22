@@ -17,3 +17,12 @@ test("app module includes login screen state", () => {
   assert.match(source, /login-form/);
   assert.match(source, /credential_employee_id/);
 });
+
+test("app module renders a logout action that clears saved authentication", () => {
+  const source = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+
+  assert.match(source, /data-action", "logout"/);
+  assert.match(source, /로그아웃/);
+  assert.match(source, /clearEmployeeId\(\)/);
+  assert.match(source, /renderLogin\(view, userSummary\)/);
+});

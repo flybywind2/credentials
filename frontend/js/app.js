@@ -59,8 +59,25 @@ async function init() {
     renderLogin(view, userSummary);
     return;
   }
-  userSummary.textContent = `${user.name} · ${user.role}`;
+  renderAuthenticatedSummary(userSummary, user, view);
   await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
+}
+
+function renderAuthenticatedSummary(userSummary, user, view) {
+  const label = document.createElement("span");
+  label.textContent = `${user.name} · ${user.role}`;
+
+  const logoutButton = document.createElement("button");
+  logoutButton.type = "button";
+  logoutButton.className = "secondary-button compact-filter-button";
+  logoutButton.setAttribute("data-action", "logout");
+  logoutButton.textContent = "로그아웃";
+  logoutButton.addEventListener("click", () => {
+    clearEmployeeId();
+    renderLogin(view, userSummary);
+  });
+
+  userSummary.replaceChildren(label, logoutButton);
 }
 
 function renderLogin(view, userSummary) {
@@ -88,7 +105,7 @@ function renderLogin(view, userSummary) {
     error.textContent = "";
     try {
       const user = await loginWithEmployeeId(employeeId, password);
-      userSummary.textContent = `${user.name} · ${user.role}`;
+      renderAuthenticatedSummary(userSummary, user, view);
       await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
     } catch (loginError) {
       clearEmployeeId();

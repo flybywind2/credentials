@@ -112,3 +112,11 @@ test("task form exposes bulk none selection buttons for confidential and nationa
   assert.match(formSource, /data-none-target="\$\{type\}"/);
   assert.match(formSource, /해당 없음 일괄 선택/);
 });
+
+test("task form keeps the modal open and shows a visible error when save fails", () => {
+  assert.match(formSource, /data-form-error/);
+  assert.match(formSource, /try\s*{/);
+  assert.match(formSource, /catch\s*\(saveError\)/);
+  assert.match(formSource, /저장 실패/);
+  assert.match(formSource, /saveError\.message/);
+});

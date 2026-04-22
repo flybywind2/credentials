@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  deleteConfirmationMessage,
   firstErrorRow,
   groupValidationErrors,
   previewSelectionSummary,
+  renderActionError,
   selectedPreviewRows,
 } from "../js/spreadsheet.js";
 
@@ -63,4 +65,27 @@ test("selectedPreviewRows returns only checked valid rows", () => {
   assert.deepEqual(selectedPreviewRows(rows, groupedErrors, selectedIndexes), [
     { major_task: "저장" },
   ]);
+});
+
+test("deleteConfirmationMessage includes the task label when available", () => {
+  assert.equal(
+    deleteConfirmationMessage({ major_task: "고객 계약" }),
+    "\"고객 계약\" 항목을 삭제하시겠습니까?",
+  );
+  assert.equal(deleteConfirmationMessage({}), "선택한 항목을 삭제하시겠습니까?");
+});
+
+test("renderActionError escapes and displays action failure details", () => {
+  const html = renderActionError("삭제 실패", "서버 <오류>");
+
+  assert.match(html, /role="alert"/);
+  assert.match(html, /삭제 실패/);
+  assert.match(html, /서버 &lt;오류&gt;/);
+});
+
+test("spreadsheet delete flow confirms before deletion and reports failures", () => {
+  assert.match(spreadsheetSource, /deleteConfirmationMessage/);
+  assert.match(spreadsheetSource, /globalThis\.confirm\?/);
+  assert.match(spreadsheetSource, /catch\s*\(deleteError\)/);
+  assert.match(spreadsheetSource, /삭제 실패/);
 });

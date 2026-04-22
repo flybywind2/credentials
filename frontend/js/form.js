@@ -403,6 +403,7 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
             </label>
           </div>
         </section>
+        <p class="field-error form-save-error" data-form-error role="alert"></p>
         <div class="modal-actions">
           <button type="button" class="secondary-button" data-action="cancel">취소</button>
           <button type="button" class="secondary-button" data-action="save-current">저장</button>
@@ -448,16 +449,23 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
   });
 
   async function saveCurrent(closeAfterSave) {
+    const formError = form.querySelector("[data-form-error]");
+    formError.textContent = "";
     const payload = validateForm(form);
     if (!payload) {
       return;
     }
-    const savedTask = await onSave?.(payload, currentTask);
-    if (savedTask) {
-      currentTask = { ...currentTask, ...savedTask };
-    }
-    if (closeAfterSave) {
-      closeTaskModal();
+    try {
+      const savedTask = await onSave?.(payload, currentTask);
+      if (savedTask) {
+        currentTask = { ...currentTask, ...savedTask };
+      }
+      if (closeAfterSave) {
+        closeTaskModal();
+      }
+    } catch (saveError) {
+      formError.textContent = `저장 실패: ${saveError.message}`;
+      formError.scrollIntoView({ block: "center" });
     }
   }
 

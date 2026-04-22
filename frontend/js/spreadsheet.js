@@ -2,7 +2,7 @@ import { currentEmployeeId, fetchJson } from "./api.js";
 import { parseTsvToTasks } from "./clipboard.js";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
-import { openTaskModal } from "./form.js?v=20260422-none-bulk";
+import { openTaskModal } from "./form.js?v=20260422-save-delete-errors";
 import { tooltipMap } from "./tooltipAdmin.js?v=20260421-p1b";
 
 function badge(label, tone) {
@@ -20,6 +20,22 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+export function deleteConfirmationMessage(task) {
+  const label = task?.major_task ? `"${task.major_task}" 항목` : "선택한 항목";
+  return `${label}을 삭제하시겠습니까?`;
+}
+
+export function renderActionError(title, message) {
+  return `
+    <div class="validation-panel" role="alert">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(message)}</span>
+      </div>
+    </div>
+  `;
 }
 
 function closePastePreview() {
@@ -754,8 +770,17 @@ export async function renderSpreadsheet(container) {
     const deleteButton = event.target.closest("[data-delete-task]");
     if (deleteButton) {
       event.stopPropagation();
-      await fetchJson(`/api/tasks/${deleteButton.dataset.deleteTask}`, { method: "DELETE" });
-      await renderSpreadsheet(container);
+      const task = tasks.find((item) => String(item.id) === deleteButton.dataset.deleteTask);
+      const confirmed = globalThis.confirm?.(deleteConfirmationMessage(task)) ?? true;
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await fetchJson(`/api/tasks/${deleteButton.dataset.deleteTask}`, { method: "DELETE" });
+        await renderSpreadsheet(container);
+      } catch (deleteError) {
+        container.querySelector("[data-validation-panel]").innerHTML = renderActionError("삭제 실패", deleteError.message);
+      }
       return;
     }
     const row = event.target.closest("tr[data-task-id]");

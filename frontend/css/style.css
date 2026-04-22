@@ -652,6 +652,7 @@ body {
 .department-summary-section,
 .deadline-admin-section,
 .admin-query-section,
+.user-admin-section,
 .tooltip-admin-section {
   border-top: 1px solid var(--line);
 }
@@ -659,6 +660,7 @@ body {
 .department-summary-header,
 .deadline-admin-header,
 .admin-query-header,
+.user-admin-header,
 .tooltip-admin-header {
   border-bottom: 0;
 }
@@ -1005,6 +1007,14 @@ body {
 
 .admin-query-table {
   min-width: 1280px;
+}
+
+.user-admin-table {
+  min-width: 1040px;
+}
+
+.user-table-wrap {
+  border-top: 0;
 }
 
 .compact-table th,

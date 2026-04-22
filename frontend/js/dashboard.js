@@ -4,6 +4,7 @@ import { formatDday, renderDeadlineManager } from "./deadlineAdmin.js?v=20260421
 import { renderOrganizationManager } from "./organizationAdmin.js?v=20260421-p1b";
 import { renderQuestionManager } from "./questionAdmin.js?v=20260421-p1b";
 import { renderTooltipManager } from "./tooltipAdmin.js?v=20260421-p1b";
+import { renderUserManager } from "./userAdmin.js?v=20260422-user-permissions-a11y";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -154,8 +155,8 @@ export async function renderDashboard(container) {
             <p>파트별 업무 수와 승인 완료율입니다.</p>
           </div>
           <div class="toolbar">
-            <input class="toolbar-input" data-summary-filter placeholder="조직 검색">
-            <select class="toolbar-input" data-summary-sort>
+            <input id="department-summary-filter" name="department_summary_filter" class="toolbar-input" data-summary-filter placeholder="조직 검색" autocomplete="off">
+            <select id="department-summary-sort" name="department_summary_sort" class="toolbar-input" data-summary-sort autocomplete="off">
               <option value="part_asc">파트명</option>
               <option value="completion_desc">완료율 높은순</option>
               <option value="completion_asc">완료율 낮은순</option>
@@ -173,6 +174,7 @@ export async function renderDashboard(container) {
       </section>
       <div id="deadline-manager-root"></div>
       <div id="admin-task-query-root"></div>
+      <div id="user-manager-root"></div>
       <div id="organization-manager-root"></div>
       <div id="question-manager-root"></div>
       <div id="tooltip-manager-root"></div>
@@ -185,6 +187,7 @@ export async function renderDashboard(container) {
   container.querySelector("[data-summary-sort]").addEventListener("change", updateDepartmentRows);
   await renderDeadlineManager(container.querySelector("#deadline-manager-root"));
   await renderAdminTaskQuery(container.querySelector("#admin-task-query-root"));
+  await renderUserManager(container.querySelector("#user-manager-root"));
   await renderOrganizationManager(container.querySelector("#organization-manager-root"));
   await renderQuestionManager(container.querySelector("#question-manager-root"));
   await renderTooltipManager(container.querySelector("#tooltip-manager-root"));

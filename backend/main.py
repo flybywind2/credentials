@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings as runtime_settings
 from backend.logging_config import setup_logging
-from backend.routers import approval, auth, dashboard, export, health, organization, question, settings, task
+from backend.routers import approval, auth, dashboard, export, health, organization, question, settings, task, user_admin
 from backend.scripts.init_db import initialize_database
 from backend.services.environment import validate_runtime_settings
 
@@ -32,6 +32,7 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(settings.admin_router, prefix="/api")
 app.include_router(approval.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(user_admin.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
 

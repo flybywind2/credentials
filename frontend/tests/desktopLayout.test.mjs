@@ -6,7 +6,7 @@ const css = readFileSync(new URL("../css/style.css", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 test("frontend shell uses the review stylesheet", () => {
-  assert.match(html, /style\.css\?v=20260422-none-bulk/);
+  assert.match(html, /style\.css\?v=20260422-user-permissions/);
 });
 
 test("desktop layout fills the viewport and keeps a desktop minimum width", () => {

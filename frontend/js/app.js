@@ -1,6 +1,6 @@
 import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260422-sso-token";
 import { renderApproval } from "./approval.js?v=20260421-rejected-pin";
-import { renderDashboard } from "./dashboard.js?v=20260421-rejected-pin";
+import { renderDashboard } from "./dashboard.js?v=20260422-user-permissions-a11y2";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260421-p1b";
 import { renderPartStatus } from "./partStatus.js?v=20260421-spec-complete";
 import { renderSpreadsheet } from "./spreadsheet.js?v=20260422-save-delete-errors";

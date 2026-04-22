@@ -25,11 +25,11 @@ SSO_MODE: mock
 SMTP_MODE: disabled
 ```
 
-Use `.env.example` as the template for environment-specific values. Do not place real SSO, SMTP, or production database secrets in the repository.
+Use `.env.example` as the template for environment-specific values. Do not place real SSO, mail API, SMTP, or production database secrets in the repository.
 
 ## Private Cloud Run
 
-Create `.env.private-cloud` outside source control from `.env.example`, then set production values for `DATABASE_URL`, `SSO_MODE`, `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, the LDAP or SAML mode-specific variables, `SMTP_HOST`, `SMTP_USERNAME`, and `SMTP_PASSWORD`.
+Create `.env.private-cloud` outside source control from `.env.example`, then set production values for `DATABASE_URL`, `APP_BASE_URL`, `SSO_MODE`, `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, the LDAP or SAML mode-specific variables, and the `MAIL_API_*` values. Use `SMTP_MODE=mail_api` for the company mail gateway. The app posts to `{MAIL_API_BASE_URL}/send_mail`; `MAIL_API_BASE_URL=mail.net` resolves to `https://mail.net/send_mail`.
 
 Run the private-cloud profile from the repository root:
 

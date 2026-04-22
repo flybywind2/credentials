@@ -28,7 +28,8 @@ def validate_runtime_settings(settings: Settings) -> None:
             missing.append("SSO_TOKEN_SECRET")
     if sso_mode not in {"mock", "disabled", "ldap", "saml"}:
         missing.append("SSO_MODE")
-    if settings.smtp_mode.lower() == "smtp":
+    smtp_mode = settings.smtp_mode.lower()
+    if smtp_mode == "smtp":
         for name, value in [
             ("SMTP_HOST", settings.smtp_host),
             ("SMTP_USERNAME", settings.smtp_username),
@@ -36,5 +37,15 @@ def validate_runtime_settings(settings: Settings) -> None:
         ]:
             if not value:
                 missing.append(name)
+    if smtp_mode == "mail_api":
+        for name, value in [
+            ("MAIL_API_BASE_URL", settings.mail_api_base_url),
+        ]:
+            if not value:
+                missing.append(name)
+        if settings.mail_api_payload_format.lower() not in {"json", "form"}:
+            missing.append("MAIL_API_PAYLOAD_FORMAT")
+    if smtp_mode not in {"disabled", "smtp", "mail_api"}:
+        missing.append("SMTP_MODE")
     if missing:
         raise ValueError(f"Missing required environment variables: {', '.join(missing)}")

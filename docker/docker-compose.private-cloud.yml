@@ -7,7 +7,7 @@ services:
     env_file:
       - ../.env.private-cloud
     environment:
-      SMTP_MODE: smtp
+      SMTP_MODE: mail_api
     ports:
       - "8000:8000"
     restart: unless-stopped

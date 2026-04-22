@@ -54,5 +54,8 @@ def test_submit_and_reject_send_email_notifications(monkeypatch):
 
     assert fake.messages[0].subject == "승인 요청 제출"
     assert "div001@samsung.com" in fake.messages[0].recipients
+    assert f"/approver/approvals/{approval['id']}" in fake.messages[0].body
+    assert f"/approver/approvals/{approval['id']}" in fake.messages[0].html_body
+    assert "승인 검토 바로가기" in fake.messages[0].html_body
     assert fake.messages[-1].subject == "승인 반려"
     assert "알림 반려" in fake.messages[-1].body

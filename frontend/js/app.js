@@ -1,5 +1,5 @@
 import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260422-sso-token";
-import { renderApproval } from "./approval.js?v=20260421-rejected-pin";
+import { renderApproval } from "./approval.js?v=20260422-url-routes";
 import { renderDashboard } from "./dashboard.js?v=20260422-user-permissions-a11y2";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260421-p1b";
 import { renderPartStatus } from "./partStatus.js?v=20260421-spec-complete";
@@ -14,15 +14,37 @@ const routes = {
 };
 
 const routeItems = [
-  { key: "inputter", label: "입력자", roles: ["INPUTTER", "ADMIN"] },
-  { key: "status", label: "내 파트 현황", roles: ["INPUTTER", "ADMIN"] },
-  { key: "group", label: "그룹 조회", roles: ["INPUTTER", "ADMIN"] },
-  { key: "approver", label: "승인자", roles: ["APPROVER", "ADMIN"] },
-  { key: "admin", label: "관리자", roles: ["ADMIN"] },
+  { key: "inputter", label: "입력자", path: "/inputter", roles: ["INPUTTER", "ADMIN"] },
+  { key: "status", label: "내 파트 현황", path: "/status", roles: ["INPUTTER", "ADMIN"] },
+  { key: "group", label: "그룹 조회", path: "/group", roles: ["INPUTTER", "ADMIN"] },
+  { key: "approver", label: "승인자", path: "/approver", roles: ["APPROVER", "ADMIN"] },
+  { key: "admin", label: "관리자", path: "/admin", roles: ["ADMIN"] },
 ];
+
+let activePopstateHandler = null;
 
 export function availableRoutesForRole(role) {
   return routeItems.filter((item) => item.roles.includes(role));
+}
+
+export function routePathForKey(key, params = {}) {
+  if (key === "approver" && params.approvalId) {
+    return `/approver/approvals/${encodeURIComponent(params.approvalId)}`;
+  }
+  return routeItems.find((item) => item.key === key)?.path || "/inputter";
+}
+
+export function routeFromPath(pathname = "/") {
+  const path = String(pathname || "/").replace(/\/+$/, "") || "/";
+  const approvalDetailMatch = path.match(/^\/approver\/approvals\/([^/]+)$/);
+  if (approvalDetailMatch) {
+    return {
+      key: "approver",
+      params: { approvalId: decodeURIComponent(approvalDetailMatch[1]) },
+    };
+  }
+  const route = routeItems.find((item) => item.path === path);
+  return { key: route?.key || "inputter", params: {} };
 }
 
 function renderNav(activeKey, userRole) {
@@ -38,17 +60,52 @@ function renderNav(activeKey, userRole) {
   `;
 }
 
-async function navigate(routeKey, userRole, view) {
+function syncBrowserPath(path, replace = false) {
+  if (typeof window === "undefined" || window.location.pathname === path) {
+    return;
+  }
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({}, "", path);
+}
+
+async function navigate(routeKey, userRole, view, options = {}) {
+  const params = options.params || {};
   const allowedRoutes = availableRoutesForRole(userRole);
   const activeRouteKey = allowedRoutes.some((item) => item.key === routeKey)
     ? routeKey
     : allowedRoutes[0]?.key || "inputter";
+  const activeParams = activeRouteKey === routeKey ? params : {};
   const route = routes[activeRouteKey] || routes.inputter;
+  syncBrowserPath(routePathForKey(activeRouteKey, activeParams), options.replace);
   view.innerHTML = `${renderNav(activeRouteKey, userRole)}<div id="workspace-root"></div>`;
   view.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => navigate(button.dataset.route, userRole, view));
   });
-  await route(view.querySelector("#workspace-root"));
+  await route(view.querySelector("#workspace-root"), {
+    params: activeParams,
+    navigateTo: (nextRouteKey, nextParams = {}) => navigate(nextRouteKey, userRole, view, { params: nextParams }),
+  });
+}
+
+function bindPopstate(userRole, view) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (activePopstateHandler) {
+    window.removeEventListener("popstate", activePopstateHandler);
+  }
+  activePopstateHandler = () => {
+    const route = routeFromPath(window.location.pathname);
+    navigate(route.key, userRole, view, { params: route.params, replace: true });
+  };
+  window.addEventListener("popstate", activePopstateHandler);
+}
+
+function unbindPopstate() {
+  if (typeof window !== "undefined" && activePopstateHandler) {
+    window.removeEventListener("popstate", activePopstateHandler);
+  }
+  activePopstateHandler = null;
 }
 
 async function init() {
@@ -60,7 +117,9 @@ async function init() {
     return;
   }
   renderAuthenticatedSummary(userSummary, user, view);
-  await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
+  bindPopstate(user.role, view);
+  const initialRoute = routeFromPath(window.location.pathname);
+  await navigate(initialRoute.key, user.role, view, { params: initialRoute.params, replace: true });
 }
 
 function renderAuthenticatedSummary(userSummary, user, view) {
@@ -74,6 +133,7 @@ function renderAuthenticatedSummary(userSummary, user, view) {
   logoutButton.textContent = "로그아웃";
   logoutButton.addEventListener("click", () => {
     clearEmployeeId();
+    unbindPopstate();
     renderLogin(view, userSummary);
   });
 
@@ -106,7 +166,9 @@ function renderLogin(view, userSummary) {
     try {
       const user = await loginWithEmployeeId(employeeId, password);
       renderAuthenticatedSummary(userSummary, user, view);
-      await navigate(availableRoutesForRole(user.role)[0]?.key || "inputter", user.role, view);
+      bindPopstate(user.role, view);
+      const nextRoute = routeFromPath(window.location.pathname);
+      await navigate(nextRoute.key, user.role, view, { params: nextRoute.params, replace: true });
     } catch (loginError) {
       clearEmployeeId();
       error.textContent = loginError.message;

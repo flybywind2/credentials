@@ -132,6 +132,18 @@ spec:
                   name: credential-secrets
                   key: SMTP_PASSWORD
                   optional: true
+            - name: MAIL_API_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: MAIL_API_BASE_URL
+                  optional: true
+            - name: MAIL_API_SYSTEM_ID
+              valueFrom:
+                secretKeyRef:
+                  name: credential-secrets
+                  key: MAIL_API_SYSTEM_ID
+                  optional: true
           readinessProbe:
             httpGet:
               path: /api/health

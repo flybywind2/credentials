@@ -218,12 +218,20 @@ function openRejectModal(approvalId, onRejected, taskReviews = [], defaultReason
   overlay.querySelector("#reject-reason").focus();
 }
 
-async function approveApproval(approvalId, container) {
-  await fetchJson(`/api/approvals/${approvalId}/approve`, { method: "POST" });
-  await renderApproval(container);
+async function renderApprovalList(container, context = {}) {
+  if (context.navigateTo) {
+    await context.navigateTo("approver");
+    return;
+  }
+  await renderApproval(container, context);
 }
 
-async function approveReviewedApproval(approvalId, container, tasks) {
+async function approveApproval(approvalId, container, context = {}) {
+  await fetchJson(`/api/approvals/${approvalId}/approve`, { method: "POST" });
+  await renderApprovalList(container, context);
+}
+
+async function approveReviewedApproval(approvalId, container, tasks, context = {}) {
   const taskReviews = collectTaskReviews(container);
   const validation = validateTaskReviewPayload(tasks, taskReviews, "approve");
   if (!validation.valid) {
@@ -234,20 +242,25 @@ async function approveReviewedApproval(approvalId, container, tasks) {
     method: "POST",
     body: JSON.stringify({ task_reviews: taskReviews }),
   });
-  await renderApproval(container);
+  await renderApprovalList(container, context);
 }
 
-async function rejectReviewedApproval(approvalId, container, tasks) {
+async function rejectReviewedApproval(approvalId, container, tasks, context = {}) {
   const taskReviews = collectTaskReviews(container);
   const validation = validateTaskReviewPayload(tasks, taskReviews, "reject");
   if (!validation.valid) {
     renderReviewError(container, validation.message);
     return;
   }
-  openRejectModal(approvalId, () => renderApproval(container), taskReviews, rejectReasonFromReviews(tasks, taskReviews));
+  openRejectModal(
+    approvalId,
+    () => renderApprovalList(container, context),
+    taskReviews,
+    rejectReasonFromReviews(tasks, taskReviews),
+  );
 }
 
-async function renderApprovalDetail(container, approvalId) {
+async function renderApprovalDetail(container, approvalId, context = {}) {
   const approval = await fetchJson(`/api/approvals/${approvalId}/history`);
   const tasks = await fetchJson(`/api/tasks?org_id=${approval.organization_id}`);
 
@@ -291,13 +304,13 @@ async function renderApprovalDetail(container, approvalId) {
   `;
 
   container.querySelector("[data-action='back-to-approvals']").addEventListener("click", () => {
-    renderApproval(container);
+    renderApprovalList(container, context);
   });
   container.querySelector("[data-action='approve-detail']").addEventListener("click", () => {
-    approveReviewedApproval(approvalId, container, tasks);
+    approveReviewedApproval(approvalId, container, tasks, context);
   });
   container.querySelector("[data-action='reject-detail']").addEventListener("click", () => {
-    rejectReviewedApproval(approvalId, container, tasks);
+    rejectReviewedApproval(approvalId, container, tasks, context);
   });
   container.querySelectorAll("tbody tr[data-task-id]").forEach((row) => {
     row.addEventListener("click", (event) => {
@@ -310,7 +323,13 @@ async function renderApprovalDetail(container, approvalId) {
   });
 }
 
-export async function renderApproval(container) {
+export async function renderApproval(container, context = {}) {
+  const approvalIdFromPath = context.params?.approvalId;
+  if (approvalIdFromPath) {
+    await renderApprovalDetail(container, approvalIdFromPath, context);
+    return;
+  }
+
   const approvals = await fetchJson("/api/approvals/pending");
   container.innerHTML = `
     <section class="workspace">
@@ -340,11 +359,19 @@ export async function renderApproval(container) {
   container.querySelectorAll("[data-approval-id]").forEach((row) => {
     const approvalId = row.dataset.approvalId;
     row.addEventListener("click", () => {
-      renderApprovalDetail(container, approvalId);
+      if (context.navigateTo) {
+        context.navigateTo("approver", { approvalId });
+        return;
+      }
+      renderApprovalDetail(container, approvalId, context);
     });
     row.querySelector("[data-action='open-detail']").addEventListener("click", (event) => {
       event.stopPropagation();
-      renderApprovalDetail(container, approvalId);
+      if (context.navigateTo) {
+        context.navigateTo("approver", { approvalId });
+        return;
+      }
+      renderApprovalDetail(container, approvalId, context);
     });
   });
 }

@@ -7,6 +7,13 @@ metadata:
     app.kubernetes.io/name: credential-classification
     app.kubernetes.io/component: web
 data:
+  APP_BASE_URL: "http://127.0.0.1:8000"
   SSO_MODE: "mock"
   SMTP_MODE: "disabled"
   SMTP_PORT: "587"
+  MAIL_API_BASE_URL: "mail.net"
+  MAIL_API_DOC_SECU_TYPE: "PERSONAL"
+  MAIL_API_CONTENT_TYPE: "HTML"
+  MAIL_API_PAYLOAD_FORMAT: "json"
+  MAIL_API_RECIPIENT_TYPE: "TO"
+  MAIL_API_TIMEOUT_SECONDS: "10"

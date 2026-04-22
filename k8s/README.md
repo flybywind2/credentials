@@ -41,7 +41,7 @@ namespace를 먼저 만든다.
 kubectl apply -f k8s/namespace.yaml
 ```
 
-외부 MySQL, SSO, SMTP를 사용하는 운영 배포는 secret을 만든다.
+외부 MySQL, SSO, 사내 메일 API를 사용하는 운영 배포는 secret을 만든다.
 
 ```powershell
 kubectl -n credential create secret generic credential-secrets `
@@ -50,9 +50,8 @@ kubectl -n credential create secret generic credential-secrets `
   --from-literal=SSO_TOKEN_SECRET="change-me-to-random-32-byte-secret" `
   --from-literal=SSO_LDAP_BIND_DN_TEMPLATE="{employee_id}@example.internal" `
   --from-literal=SSO_LDAP_SEARCH_BASE="OU=Users,DC=example,DC=internal" `
-  --from-literal=SMTP_HOST="smtp.example.internal" `
-  --from-literal=SMTP_USERNAME="credential-app@example.internal" `
-  --from-literal=SMTP_PASSWORD="change-me"
+  --from-literal=MAIL_API_BASE_URL="mail.net" `
+  --from-literal=MAIL_API_SYSTEM_ID="credential-system"
 ```
 
 개발 smoke test 목적이면 secret 없이도 컨테이너 이미지의 기본 `sqlite:///./dev.db`, `SSO_MODE=mock`, `SMTP_MODE=disabled` 값으로 기동할 수 있다. 단, 이 경우 DB는 pod 수명에 종속되므로 운영 데이터에는 사용할 수 없다.
@@ -63,21 +62,30 @@ kubectl -n credential create secret generic credential-secrets `
 
 ```yaml
 data:
+  APP_BASE_URL: "http://127.0.0.1:8000"
   SSO_MODE: "mock"
   SMTP_MODE: "disabled"
   SMTP_PORT: "587"
+  MAIL_API_BASE_URL: "mail.net"
+  MAIL_API_DOC_SECU_TYPE: "PERSONAL"
+  MAIL_API_CONTENT_TYPE: "HTML"
+  MAIL_API_PAYLOAD_FORMAT: "json"
 ```
 
 운영 LDAP 연동 예시:
 
 ```yaml
 data:
+  APP_BASE_URL: "https://credential.example.internal"
   SSO_MODE: "ldap"
-  SMTP_MODE: "smtp"
-  SMTP_PORT: "587"
+  SMTP_MODE: "mail_api"
+  MAIL_API_BASE_URL: "mail.net"
+  MAIL_API_DOC_SECU_TYPE: "PERSONAL"
+  MAIL_API_CONTENT_TYPE: "HTML"
+  MAIL_API_PAYLOAD_FORMAT: "json"
 ```
 
-`SSO_MODE=ldap`이면 `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, `SSO_LDAP_BIND_DN_TEMPLATE` secret 값이 필요하다. `SSO_MODE=saml`이면 ACS URL, SP entity id, IdP entity id, SSO URL, IdP 인증서, token secret이 필요하다. `SMTP_MODE=smtp`이면 SMTP secret 값이 필요하다.
+`SSO_MODE=ldap`이면 `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, `SSO_LDAP_BIND_DN_TEMPLATE` secret 값이 필요하다. `SSO_MODE=saml`이면 ACS URL, SP entity id, IdP entity id, SSO URL, IdP 인증서, token secret이 필요하다. `SMTP_MODE=mail_api`이면 `MAIL_API_BASE_URL` 값이 필요하고, `MAIL_API_SYSTEM_ID`는 필요한 경우 header `System-ID`로 전달한다.
 
 ## Deploy
 

@@ -22,7 +22,7 @@
 - 승인 요청, 승인, 반려, 수정 요청, 관리자 설정 변경은 감사 대상 이벤트로 분류한다.
 - 감사 로그 필드는 `event`, `employee_id`, `role`, `organization_id`, `resource_id`, `status`, `created_at`을 기본으로 한다.
 - 로그는 최소 1년 보관하며, 운영 환경에서는 중앙 로그 저장소로 전송한다.
-- 개인정보와 SSO secret, SMTP password, DB password는 로그에 기록하지 않는다.
+- 개인정보와 SSO secret, SMTP password, 사내 메일 API 식별자, DB password는 로그에 기록하지 않는다.
 
 ## 접근 로그
 
@@ -35,7 +35,7 @@
 - 기준 데이터: 191개 파트, 5,000건 업무, 동시 접속 100명.
 - 핵심 API 목표: 목록/대시보드 조회 p95 2초 이하, 승인/반려 p95 3초 이하.
 - 검증 시나리오: 로그인, 업무 조회, 행 저장, 승인 요청, 승인 대기 조회, 승인/반려, 관리자 대시보드 조회.
-- 성능 검증은 운영과 동일한 MySQL, SSO gateway, SMTP 설정을 사용하는 스테이징 환경에서 수행한다.
+- 성능 검증은 운영과 동일한 MySQL, SSO gateway, 메일 발송 설정을 사용하는 스테이징 환경에서 수행한다.
 
 ## Docker 기동 검증
 

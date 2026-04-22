@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 import html
+import json
 import logging
 from email.message import EmailMessage as SmtpMessage
 from typing import Protocol
 import smtplib
+
+import httpx
 
 from backend.config import settings
 
@@ -57,9 +60,65 @@ class SmtpEmailService:
             raise
 
 
+class MailApiEmailService:
+    def send(self, message: EmailMessage) -> dict:
+        payload = self._payload(message)
+        response = httpx.post(
+            self._url(),
+            **self._request_body(payload),
+            headers=self._headers(),
+            timeout=settings.mail_api_timeout_seconds,
+        )
+        response.raise_for_status()
+        return {"status": "sent", "recipients": message.recipients}
+
+    def _url(self) -> str:
+        base_url = settings.mail_api_base_url.strip().rstrip("/")
+        if not base_url.startswith(("http://", "https://")):
+            base_url = f"https://{base_url}"
+        if base_url.endswith("/send_mail"):
+            return base_url
+        return f"{base_url}/send_mail"
+
+    def _payload(self, message: EmailMessage) -> dict:
+        content_type = settings.mail_api_content_type or ("HTML" if message.html_body else "TEXT")
+        contents = message.html_body if content_type.upper() == "HTML" and message.html_body else message.body
+        return {
+            "subject": message.subject,
+            "contents": contents,
+            "contentType": content_type,
+            "docSecuType": settings.mail_api_doc_secu_type,
+            "recipients": [
+                {
+                    "emailAddress": recipient,
+                    "recipientType": settings.mail_api_recipient_type,
+                }
+                for recipient in message.recipients
+            ],
+        }
+
+    def _headers(self) -> dict:
+        if settings.mail_api_system_id:
+            return {"System-ID": settings.mail_api_system_id}
+        return {}
+
+    def _request_body(self, payload: dict) -> dict:
+        if settings.mail_api_payload_format.lower() == "form":
+            return {
+                "data": {
+                    key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                    for key, value in payload.items()
+                }
+            }
+        return {"json": payload}
+
+
 def get_email_service() -> EmailService:
-    if settings.smtp_mode.lower() == "smtp":
+    mode = settings.smtp_mode.lower()
+    if mode == "smtp":
         return SmtpEmailService()
+    if mode == "mail_api":
+        return MailApiEmailService()
     return DisabledEmailService()
 
 
@@ -69,10 +128,23 @@ def employee_email(employee_id: str | None) -> str | None:
     return f"{employee_id}@samsung.com"
 
 
-def build_approval_email_html(title: str, body: str) -> str:
+def build_approval_email_html(
+    title: str,
+    body: str,
+    action_url: str | None = None,
+    action_label: str = "바로가기",
+) -> str:
     paragraphs = "".join(
         f"<p>{html.escape(line)}</p>" for line in body.splitlines() if line.strip()
     )
+    action_button = ""
+    if action_url:
+        action_button = f"""
+                <p style="margin-top:24px;">
+                  <a href="{html.escape(action_url, quote=True)}" style="display:inline-block;background:#1f6feb;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:6px;font-weight:700;">
+                    {html.escape(action_label)}
+                  </a>
+                </p>"""
     return f"""<!doctype html>
 <html lang="ko">
   <head>
@@ -92,6 +164,7 @@ def build_approval_email_html(title: str, body: str) -> str:
             <tr>
               <td style="padding:20px 24px;font-size:14px;line-height:1.6;">
                 {paragraphs or "<p>기밀분류시스템 알림입니다.</p>"}
+{action_button}
               </td>
             </tr>
           </table>

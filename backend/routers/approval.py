@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from backend.config import settings
 from backend.database import get_db
 from backend.dependencies import ensure_can_write_org, get_current_user, require_approver_or_admin
 from backend.models import ApprovalRequest, ApprovalStep, ApprovalTaskReview, Organization, TaskEntry, User
@@ -38,17 +39,33 @@ class EditRequest(BaseModel):
     reason: str = Field(min_length=1)
 
 
-def _notify(subject: str, recipients: list[str | None], body: str) -> None:
+def _approval_detail_url(approval_id: int) -> str:
+    return f"{settings.app_base_url.rstrip('/')}/approver/approvals/{approval_id}"
+
+
+def _notify(
+    subject: str,
+    recipients: list[str | None],
+    body: str,
+    action_url: str | None = None,
+    action_label: str = "승인 검토 바로가기",
+) -> None:
     target_recipients = [recipient for recipient in recipients if recipient]
     if not target_recipients:
         return
+    email_body = f"{body}\n\n{action_label}: {action_url}" if action_url else body
     try:
         email_service.send(
             EmailMessage(
                 subject=subject,
                 recipients=target_recipients,
-                body=body,
-                html_body=build_approval_email_html(subject, body),
+                body=email_body,
+                html_body=build_approval_email_html(
+                    subject,
+                    body,
+                    action_url=action_url,
+                    action_label=action_label,
+                ),
             )
         )
     except Exception:
@@ -303,6 +320,7 @@ def approve_request(
             "다음 단계 승인 요청",
             [employee_email(next_step.approver_employee_id), employee_email("admin001")],
             f"승인 요청 {request.id}이 {request.current_step}단계로 이동했습니다.",
+            action_url=_approval_detail_url(request.id),
         )
     return _serialize_request(db, request)
 
@@ -473,5 +491,6 @@ def submit_approval(
         "승인 요청 제출",
         [employee_email(path[0])],
         f"{org.part_name} 승인 요청 {request.id}이 제출되었습니다.",
+        action_url=_approval_detail_url(request.id),
     )
     return _serialize_request(db, request)

@@ -60,3 +60,9 @@ test("approval detail opens reject reason modal for reviewed rejections", () => 
   assert.match(approvalSource, /task_reviews: taskReviews/);
   assert.match(approvalSource, /requested_at/);
 });
+
+test("approval view supports direct detail URLs and route navigation", () => {
+  assert.match(approvalSource, /params\?\.approvalId/);
+  assert.match(approvalSource, /navigateTo\("approver", \{ approvalId \}\)/);
+  assert.match(approvalSource, /back-to-approvals/);
+});

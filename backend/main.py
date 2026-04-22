@@ -73,4 +73,22 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/")
 def read_frontend():
+    return _frontend_response()
+
+
+def _frontend_response():
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/inputter")
+@app.get("/status")
+@app.get("/group")
+@app.get("/approver")
+@app.get("/admin")
+def read_frontend_route():
+    return _frontend_response()
+
+
+@app.get("/approver/approvals/{approval_id}")
+def read_approval_frontend_route(approval_id: int):
+    return _frontend_response()

@@ -34,11 +34,13 @@ SSO_LDAP_SEARCH_BASE=OU=Users,DC=example,DC=internal
 SSO_LDAP_SEARCH_FILTER=(sAMAccountName={employee_id})
 SSO_LDAP_EMPLOYEE_ATTR=sAMAccountName
 SSO_LDAP_NAME_ATTR=displayName
-SMTP_MODE=smtp
-SMTP_HOST=smtp.example.internal
-SMTP_PORT=587
-SMTP_USERNAME=credential-app@example.internal
-SMTP_PASSWORD=change-me
+APP_BASE_URL=https://credential.example.internal
+SMTP_MODE=mail_api
+MAIL_API_BASE_URL=mail.net
+MAIL_API_SYSTEM_ID=credential-system
+MAIL_API_DOC_SECU_TYPE=PERSONAL
+MAIL_API_CONTENT_TYPE=HTML
+MAIL_API_PAYLOAD_FORMAT=json
 ```
 
 SAML을 사용할 경우:
@@ -188,6 +190,8 @@ python -m pytest backend/tests/test_mysql_compatibility.py backend/tests/test_ss
 - `SSO_MODE=ldap`이면 `SSO_PROVIDER_URL`, `SSO_LDAP_BIND_DN_TEMPLATE`, `SSO_TOKEN_SECRET` 또는 `SSO_CLIENT_SECRET`이 필요하다.
 - `SSO_MODE=saml`이면 ACS URL, SP entity id, IdP entity id, SSO URL, IdP 인증서, token secret이 필요하다.
 - `SMTP_MODE=smtp`이면 `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`가 필요하다.
+- `SMTP_MODE=mail_api`이면 `MAIL_API_BASE_URL`이 필요하다. `MAIL_API_SYSTEM_ID`가 있으면 요청 header `System-ID`로 전달한다.
+- 사내 메일 API는 `POST https://mail.net/send_mail` 형식으로 호출한다. `MAIL_API_BASE_URL=mail.net` 또는 `MAIL_API_BASE_URL=https://mail.net/send_mail` 모두 지원한다. 기본 payload는 JSON이며, gateway가 form parameter를 요구하면 `MAIL_API_PAYLOAD_FORMAT=form`으로 변경한다.
 - 값이 없으면 앱 시작 시 `Missing required environment variables` 오류로 중단된다.
 - 지원하지 않는 `SSO_MODE`를 쓰면 인증 요청에서 `Unsupported SSO_MODE` 오류가 발생한다.
 - MySQL 접속 실패 시 DNS, 방화벽, 계정 host, TLS 옵션, URL 인코딩된 비밀번호를 우선 확인한다.

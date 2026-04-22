@@ -5,6 +5,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+    app_base_url: str = os.getenv("APP_BASE_URL", "http://127.0.0.1:8000")
     sso_mode: str = os.getenv("SSO_MODE", "mock")
     sso_provider_url: str = os.getenv("SSO_PROVIDER_URL", "")
     sso_client_id: str = os.getenv("SSO_CLIENT_ID", "")
@@ -31,6 +32,13 @@ class Settings:
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     smtp_username: str = os.getenv("SMTP_USERNAME", "")
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    mail_api_base_url: str = os.getenv("MAIL_API_BASE_URL", "mail.net")
+    mail_api_system_id: str = os.getenv("MAIL_API_SYSTEM_ID", "")
+    mail_api_doc_secu_type: str = os.getenv("MAIL_API_DOC_SECU_TYPE", "PERSONAL")
+    mail_api_content_type: str = os.getenv("MAIL_API_CONTENT_TYPE", "HTML")
+    mail_api_payload_format: str = os.getenv("MAIL_API_PAYLOAD_FORMAT", "json")
+    mail_api_recipient_type: str = os.getenv("MAIL_API_RECIPIENT_TYPE", "TO")
+    mail_api_timeout_seconds: float = float(os.getenv("MAIL_API_TIMEOUT_SECONDS", "10"))
 
 
 settings = Settings()

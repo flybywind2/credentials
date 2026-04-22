@@ -2,7 +2,7 @@ import { currentEmployeeId, fetchJson } from "./api.js";
 import { parseTsvToTasks } from "./clipboard.js";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
-import { openTaskModal } from "./form.js";
+import { openTaskModal } from "./form.js?v=20260422-classification-fields";
 import { tooltipMap } from "./tooltipAdmin.js?v=20260421-p1b";
 
 function badge(label, tone) {

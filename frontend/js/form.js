@@ -151,17 +151,42 @@ function radioValue(form, name) {
   return form.querySelector(`input[name="${name}"]:checked`)?.value || "";
 }
 
-function setAreaEnabled(form, areaName, enabled) {
-  form.querySelectorAll(`[data-dependent-area="${areaName}"] input`).forEach((input) => {
-    input.disabled = !enabled;
-    if (!enabled) {
-      if (input.type === "radio") {
-        input.checked = false;
-      } else {
-        input.value = "";
-      }
-    }
+function hasValue(value) {
+  return String(value ?? "").trim() !== "";
+}
+
+export function classificationRequiredFieldErrors({ isConfidential, isNationalTech, isCompliance, values }) {
+  return [
+    [isConfidential, "conf_data_type", "기밀 데이터 유형을 입력해 주세요."],
+    [isConfidential, "conf_owner_user", "기밀 소유자/사용자를 입력해 주세요."],
+    [isNationalTech, "ntech_data_type", "국가핵심기술 데이터 유형을 입력해 주세요."],
+    [isNationalTech, "ntech_owner_user", "국가핵심기술 소유자/사용자를 입력해 주세요."],
+    [isCompliance, "comp_data_type", "Compliance 데이터 유형을 입력해 주세요."],
+    [isCompliance, "comp_owner_user", "Compliance 소유자/사용자를 입력해 주세요."],
+  ]
+    .filter(([required, field]) => required && !hasValue(values[field]))
+    .map(([, field, message]) => ({
+      field,
+      message,
+    }));
+}
+
+function setAreaRequiredState(form, areaName, required) {
+  const area = form.querySelector(`[data-dependent-area="${areaName}"]`);
+  area?.toggleAttribute("data-required", required);
+  area?.querySelectorAll("input").forEach((input) => {
+    input.toggleAttribute("aria-required", required);
   });
+}
+
+function showValidationPopup(errors) {
+  if (!errors.length) {
+    return;
+  }
+  globalThis.alert?.([
+    "해당 판정 항목의 필수값을 입력해 주세요.",
+    ...errors.map((error) => `- ${error.message}`),
+  ].join("\n"));
 }
 
 function updateClassificationState(form) {
@@ -174,14 +199,14 @@ function updateClassificationState(form) {
     const badge = section.querySelector("[data-result-badge]");
     badge.textContent = isPositive ? positiveLabel : negativeLabel;
     badge.className = `badge ${isPositive ? "danger" : "neutral"}`;
-    setAreaEnabled(form, type, isPositive);
+    setAreaRequiredState(form, type, isPositive);
   });
 
   const complianceChecked = form.elements.is_compliance.checked;
   const complianceBadge = form.querySelector("[data-compliance-badge]");
   complianceBadge.textContent = complianceChecked ? "해당" : "비해당";
   complianceBadge.className = `badge ${complianceChecked ? "warning" : "neutral"}`;
-  setAreaEnabled(form, "compliance", complianceChecked);
+  setAreaRequiredState(form, "compliance", complianceChecked);
 }
 
 function clearErrors(form) {
@@ -215,16 +240,6 @@ function validateForm(form) {
     ["detail_task", "세부업무는 필수입니다."],
   ];
 
-  if (isConfidential) {
-    requiredText.push(["conf_data_type", "기밀 데이터 유형은 필수입니다."]);
-  }
-  if (isNationalTech) {
-    requiredText.push(["ntech_data_type", "국가핵심기술 데이터 유형은 필수입니다."]);
-  }
-  if (isCompliance) {
-    requiredText.push(["comp_data_type", "Compliance 데이터 유형은 필수입니다."]);
-  }
-
   requiredText.forEach(([name, message]) => {
     if (!form.elements[name].value.trim()) {
       showError(form, name, message);
@@ -244,18 +259,27 @@ function validateForm(form) {
     });
   });
 
-  [
-    [isConfidential, "conf_owner_user", "기밀 소유자/사용자는 필수입니다."],
-    [isNationalTech, "ntech_owner_user", "국가핵심기술 소유자/사용자는 필수입니다."],
-    [isCompliance, "comp_owner_user", "Compliance 소유자/사용자는 필수입니다."],
-  ].forEach(([required, name, message]) => {
-    if (required && !radioValue(form, name)) {
-      showError(form, name, message);
-      hasError = true;
-    }
+  const classificationErrors = classificationRequiredFieldErrors({
+    isConfidential,
+    isNationalTech,
+    isCompliance,
+    values: {
+      conf_data_type: form.elements.conf_data_type.value,
+      conf_owner_user: radioValue(form, "conf_owner_user"),
+      ntech_data_type: form.elements.ntech_data_type.value,
+      ntech_owner_user: radioValue(form, "ntech_owner_user"),
+      comp_data_type: form.elements.comp_data_type.value,
+      comp_owner_user: radioValue(form, "comp_owner_user"),
+    },
+  });
+
+  classificationErrors.forEach(({ field, message }) => {
+    showError(form, field, message);
+    hasError = true;
   });
 
   if (hasError) {
+    showValidationPopup(classificationErrors);
     form.querySelector("[aria-invalid='true'], .field-error:not(:empty)")?.scrollIntoView({ block: "center" });
     return null;
   }
@@ -265,14 +289,14 @@ function validateForm(form) {
     major_task: form.elements.major_task.value.trim(),
     detail_task: form.elements.detail_task.value.trim(),
     confidential_answers: confidentialAnswers,
-    conf_data_type: isConfidential ? form.elements.conf_data_type.value.trim() : "",
-    conf_owner_user: isConfidential ? radioValue(form, "conf_owner_user") : "",
+    conf_data_type: form.elements.conf_data_type.value.trim(),
+    conf_owner_user: radioValue(form, "conf_owner_user"),
     national_tech_answers: nationalTechAnswers,
-    ntech_data_type: isNationalTech ? form.elements.ntech_data_type.value.trim() : "",
-    ntech_owner_user: isNationalTech ? radioValue(form, "ntech_owner_user") : "",
+    ntech_data_type: form.elements.ntech_data_type.value.trim(),
+    ntech_owner_user: radioValue(form, "ntech_owner_user"),
     is_compliance: isCompliance,
-    comp_data_type: isCompliance ? form.elements.comp_data_type.value.trim() : "",
-    comp_owner_user: isCompliance ? radioValue(form, "comp_owner_user") : "",
+    comp_data_type: form.elements.comp_data_type.value.trim(),
+    comp_owner_user: radioValue(form, "comp_owner_user"),
     storage_location: form.elements.storage_location.value.trim(),
     related_menu: form.elements.related_menu.value.trim(),
     share_scope: form.elements.share_scope.value,

@@ -436,7 +436,7 @@ def _add_task(db: Session, user: dict, payload: TaskCreate) -> TaskEntry:
     task = TaskEntry(
         organization_id=payload.organization_id,
         created_by=creator.id,
-        sub_part=payload.sub_part,
+        sub_part=_none_if_blank(payload.sub_part),
         major_task=payload.major_task,
         detail_task=payload.detail_task,
         is_confidential=classify_from_answers(_answer_options(payload.confidential_answers)),
@@ -448,9 +448,9 @@ def _add_task(db: Session, user: dict, payload: TaskCreate) -> TaskEntry:
         is_compliance=payload.is_compliance,
         comp_data_type=_none_if_blank(payload.comp_data_type),
         comp_owner_user=_none_if_blank(payload.comp_owner_user),
-        storage_location=payload.storage_location,
-        related_menu=payload.related_menu,
-        share_scope=payload.share_scope,
+        storage_location=_none_if_blank(payload.storage_location),
+        related_menu=_none_if_blank(payload.related_menu),
+        share_scope=_none_if_blank(payload.share_scope),
         status="DRAFT",
     )
     db.add(task)

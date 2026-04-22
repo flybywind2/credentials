@@ -39,6 +39,45 @@ def test_inputter_can_create_update_and_delete_own_org_task():
     assert delete_response.status_code == 204
 
 
+def test_create_task_accepts_blank_optional_form_fields():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/tasks",
+        json={
+            "organization_id": 1,
+            "sub_part": "",
+            "major_task": "선택값 없는 대업무",
+            "detail_task": "선택값 없는 세부업무",
+            "confidential_answers": [
+                {"question_id": 1, "selected_options": ["해당 없음"]}
+            ],
+            "conf_data_type": "",
+            "conf_owner_user": "",
+            "national_tech_answers": [
+                {"question_id": 1, "selected_options": ["해당 없음"]}
+            ],
+            "ntech_data_type": "",
+            "ntech_owner_user": "",
+            "is_compliance": False,
+            "comp_data_type": "",
+            "comp_owner_user": "",
+            "storage_location": "",
+            "related_menu": "",
+            "share_scope": "",
+        },
+        headers={"X-Employee-Id": "part001"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["share_scope"] is None
+    assert body["is_confidential"] is False
+    assert body["is_national_tech"] is False
+
+    client.delete(f"/api/tasks/{body['id']}", headers={"X-Employee-Id": "part001"})
+
+
 def test_inputter_cannot_create_task_for_other_org():
     client = TestClient(app)
 

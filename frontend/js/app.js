@@ -3,7 +3,7 @@ import { renderApproval } from "./approval.js?v=20260421-rejected-pin";
 import { renderDashboard } from "./dashboard.js?v=20260421-rejected-pin";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260421-p1b";
 import { renderPartStatus } from "./partStatus.js?v=20260421-spec-complete";
-import { renderSpreadsheet } from "./spreadsheet.js?v=20260422-classification-fields";
+import { renderSpreadsheet } from "./spreadsheet.js?v=20260422-none-bulk";
 
 const routes = {
   inputter: renderSpreadsheet,

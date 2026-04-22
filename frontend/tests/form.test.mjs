@@ -72,3 +72,43 @@ test("task form keeps entered metadata in the payload even when a category is no
   assert.doesNotMatch(formSource, /ntech_data_type:\s*isNationalTech\s*\?/);
   assert.doesNotMatch(formSource, /comp_data_type:\s*isCompliance\s*\?/);
 });
+
+test("selectNoneOptionsForSection checks only none options in a classification section", () => {
+  assert.equal(typeof formModule.selectNoneOptionsForSection, "function");
+
+  const firstNone = { checked: false };
+  const firstPositive = { checked: true };
+  const secondNone = { checked: false };
+  const secondPositive = { checked: true };
+  const blocks = [
+    {
+      querySelector: () => firstNone,
+      querySelectorAll: () => [firstNone, firstPositive],
+    },
+    {
+      querySelector: () => secondNone,
+      querySelectorAll: () => [secondNone, secondPositive],
+    },
+  ];
+  const form = {
+    querySelector: (selector) => {
+      assert.equal(selector, '[data-classification-section="confidential"]');
+      return {
+        querySelectorAll: () => blocks,
+      };
+    },
+  };
+
+  formModule.selectNoneOptionsForSection(form, "confidential");
+
+  assert.equal(firstNone.checked, true);
+  assert.equal(firstPositive.checked, false);
+  assert.equal(secondNone.checked, true);
+  assert.equal(secondPositive.checked, false);
+});
+
+test("task form exposes bulk none selection buttons for confidential and national tech", () => {
+  assert.match(formSource, /data-action="select-none-options"/);
+  assert.match(formSource, /data-none-target="\$\{type\}"/);
+  assert.match(formSource, /해당 없음 일괄 선택/);
+});

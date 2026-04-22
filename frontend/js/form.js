@@ -91,7 +91,12 @@ function renderClassificationSection({ type, title, resultLabel, questions, sele
     <section class="form-section" data-classification-section="${type}">
       <header class="form-section-header">
         <h3>${title}</h3>
-        <span class="badge neutral" data-result-badge data-positive-label="${resultLabel}" data-negative-label="${type === "confidential" ? "비기밀" : "비해당"}">판정 전</span>
+        <div class="form-section-actions">
+          <button type="button" class="secondary-button compact-filter-button" data-action="select-none-options" data-none-target="${type}">
+            해당 없음 일괄 선택
+          </button>
+          <span class="badge neutral" data-result-badge data-positive-label="${resultLabel}" data-negative-label="${type === "confidential" ? "비기밀" : "비해당"}">판정 전</span>
+        </div>
       </header>
       ${renderQuestionBlocks(type, questions, selectedAnswers)}
       <div class="dependent-grid" data-dependent-area="${type}">
@@ -149,6 +154,19 @@ function hasPositiveAnswer(answers) {
 
 function radioValue(form, name) {
   return form.querySelector(`input[name="${name}"]:checked`)?.value || "";
+}
+
+export function selectNoneOptionsForSection(form, type) {
+  const section = form.querySelector(`[data-classification-section="${type}"]`);
+  section?.querySelectorAll("[data-question-type]").forEach((block) => {
+    const noneOption = block.querySelector("[data-none-option='true']");
+    if (!noneOption) {
+      return;
+    }
+    block.querySelectorAll("[data-question-option]").forEach((input) => {
+      input.checked = input === noneOption;
+    });
+  });
 }
 
 function hasValue(value) {
@@ -402,6 +420,15 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
   bindModalAccessibility(overlay, closeTaskModal);
 
   const form = overlay.querySelector("#task-form");
+  form.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-action='select-none-options']");
+    if (!button) {
+      return;
+    }
+    selectNoneOptionsForSection(form, button.dataset.noneTarget);
+    updateClassificationState(form);
+  });
+
   form.addEventListener("change", (event) => {
     if (event.target.matches("[data-question-option]")) {
       const block = event.target.closest("[data-question-type]");

@@ -1,11 +1,16 @@
 :root {
   color-scheme: light;
-  --bg: #f6f7f9;
+  --bg: #f7f5fb;
   --panel: #ffffff;
-  --line: #d9dde3;
-  --text: #20242a;
-  --muted: #667085;
-  --accent: #1f6feb;
+  --line: #ded7ea;
+  --text: #262130;
+  --muted: #6f687d;
+  --accent: #8f6be8;
+  --accent-hover: #7c57dc;
+  --accent-soft: #f2edff;
+  --accent-softer: #faf8ff;
+  --accent-line: #d6c7fb;
+  --accent-ink: #5d3bb6;
   --danger: #c62828;
   --success: #1b7f4c;
 }
@@ -23,6 +28,11 @@ body {
   font-family: Arial, "Malgun Gothic", sans-serif;
 }
 
+:focus-visible {
+  outline: 3px solid rgb(143 107 232 / 24%);
+  outline-offset: 2px;
+}
+
 #app {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -36,14 +46,16 @@ body {
   justify-content: space-between;
   min-height: 58px;
   padding: 10px 16px;
-  background: var(--panel);
+  background: linear-gradient(90deg, #ffffff 0%, #fbf9ff 100%);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 rgb(93 59 182 / 5%);
 }
 
 .topbar h1 {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
+  letter-spacing: 0;
 }
 
 .topbar p {
@@ -89,6 +101,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
+  box-shadow: 0 18px 50px rgb(93 59 182 / 9%);
 }
 
 .login-form h2 {
@@ -123,8 +136,7 @@ body {
   padding: 8px;
   max-height: calc(100vh - 78px);
   overflow: auto;
-  background: #eceff3;
-  border: 1px solid var(--line);
+  background: #f0ecf7;
   border-radius: 6px;
 }
 
@@ -148,15 +160,21 @@ body {
 .role-nav button {
   width: 100%;
   padding: 0 10px;
+  border: 0;
   background: transparent;
   color: var(--muted);
   text-align: left;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 .role-nav button.active {
-  background: var(--panel);
-  color: var(--text);
-  border-color: var(--line);
+  background: #ffffff;
+  color: var(--accent-ink);
+}
+
+.role-nav button:hover {
+  color: var(--accent-ink);
+  background: #faf8ff;
 }
 
 .workspace {
@@ -167,6 +185,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
+  box-shadow: 0 10px 30px rgb(93 59 182 / 6%);
   overflow: auto;
 }
 
@@ -227,6 +246,8 @@ body {
   padding: 0 14px;
   background: var(--accent);
   color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 1px 2px rgb(93 59 182 / 16%);
 }
 
 .secondary-button {
@@ -234,6 +255,19 @@ body {
   background: #fff;
   color: var(--text);
   border-color: var(--line);
+}
+
+.primary-button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.secondary-button:hover,
+.icon-button:hover,
+.question-admin-tabs button:hover {
+  color: var(--accent-ink);
+  border-color: var(--accent-line);
+  background: var(--accent-softer);
 }
 
 .status-strip {
@@ -300,7 +334,7 @@ body {
 
 .data-table th {
   color: var(--muted);
-  background: #f9fafb;
+  background: #faf8ff;
   font-weight: 600;
 }
 
@@ -312,7 +346,7 @@ body {
 
 .data-table th.sticky-col {
   z-index: 4;
-  background: #f9fafb;
+  background: #faf8ff;
 }
 
 .sticky-no {
@@ -345,11 +379,11 @@ body {
 }
 
 .data-table tbody tr:hover {
-  background: #f2f6fc;
+  background: var(--accent-softer);
 }
 
 .data-table tbody tr:hover .sticky-col {
-  background: #f2f6fc;
+  background: var(--accent-softer);
 }
 
 .data-table tbody tr.rejected-review-row td {
@@ -394,7 +428,7 @@ body {
 }
 
 .badge.status {
-  background: #e8f0fe;
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -411,8 +445,8 @@ body {
 .badge.status-submitted,
 .badge.status-pending,
 .badge.status-in_progress {
-  background: #e8f0fe;
-  color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
 .badge.status-approved {
@@ -454,7 +488,7 @@ body {
 }
 
 .approval-row:hover {
-  background: #f7f9fc;
+  background: var(--accent-softer);
 }
 
 .approval-row span {
@@ -566,13 +600,16 @@ body {
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr));
-  gap: 1px;
-  background: var(--line);
+  background: #fff;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
 .metric {
   padding: 14px;
   background: #fff;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .metric span {
@@ -585,6 +622,7 @@ body {
   display: block;
   margin-top: 8px;
   font-size: 24px;
+  color: var(--accent-ink);
 }
 
 .progress-block {
@@ -637,11 +675,11 @@ body {
 }
 
 .legend-dot.status-pending {
-  background: #1f6feb;
+  background: var(--accent);
 }
 
 .legend-dot.status-in_progress {
-  background: #6f42c1;
+  background: var(--accent-ink);
 }
 
 .legend-dot.status-approved {
@@ -661,7 +699,7 @@ body {
 
 .progress-track {
   height: 12px;
-  background: #eceff3;
+  background: #eee8f8;
   border-radius: 999px;
   overflow: hidden;
 }
@@ -697,7 +735,7 @@ body {
   justify-content: space-between;
   gap: 16px;
   padding: 12px 14px;
-  background: #f9fafb;
+  background: #faf8ff;
   border-bottom: 1px solid var(--line);
 }
 
@@ -718,6 +756,54 @@ body {
 
 .admin-panel-body > section {
   border-top: 0;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.ops-block {
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.ops-grid .ops-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.ops-block h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.ops-block p {
+  margin: 6px 0;
+  color: var(--text);
+}
+
+.compact-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.compact-list li {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.compact-list strong {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .pagination-bar {
@@ -1140,7 +1226,7 @@ body {
 
 .compact-table th {
   color: var(--muted);
-  background: #f9fafb;
+  background: #faf8ff;
   font-weight: 700;
 }
 
@@ -1294,6 +1380,12 @@ body {
   background: #fff;
 }
 
+.choice-chip:has(input:checked) {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
 .choice-chip input {
   margin: 0;
 }
@@ -1419,8 +1511,8 @@ body {
 }
 
 .excel-paste-grid:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.14);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(143 107 232 / 18%);
 }
 
 .excel-paste-grid-header,
@@ -1439,7 +1531,7 @@ body {
 
 .excel-paste-grid-header span {
   color: var(--muted);
-  background: #f8fafc;
+  background: #faf8ff;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1464,7 +1556,8 @@ body {
 .preview-summary span {
   min-height: 28px;
   padding: 6px 10px;
-  background: #f2f4f7;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
   border-radius: 6px;
 }
 

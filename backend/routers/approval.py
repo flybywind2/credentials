@@ -12,7 +12,9 @@ from backend.config import settings
 from backend.database import get_db
 from backend.dependencies import ensure_can_write_org, get_current_user, require_approver_or_admin
 from backend.models import ApprovalRequest, ApprovalStep, ApprovalTaskReview, Organization, TaskEntry, User
+from backend.services.audit import log_audit
 from backend.services.approval_flow import build_approval_path
+from backend.services.collection import ensure_collection_open
 from backend.services.email import EmailMessage, build_approval_email_html, employee_email, get_email_service
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
@@ -49,6 +51,8 @@ def _notify(
     body: str,
     action_url: str | None = None,
     action_label: str = "승인 검토 바로가기",
+    db: Session | None = None,
+    user: dict | None = None,
 ) -> None:
     target_recipients = [recipient for recipient in recipients if recipient]
     if not target_recipients:
@@ -68,8 +72,22 @@ def _notify(
                 ),
             )
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("email notification failed subject=%s", subject)
+        if db is not None:
+            try:
+                log_audit(
+                    db,
+                    action="EMAIL_SEND",
+                    user=user,
+                    target_type="Email",
+                    status="FAILED",
+                    message=f"{subject}: {exc}",
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("email failure audit log failed subject=%s", subject)
 
 
 def _approver_info(org: Organization, employee_id: str) -> tuple[str, str]:
@@ -313,6 +331,13 @@ def approve_request(
     else:
         request.current_step += 1
 
+    log_audit(
+        db,
+        action="APPROVAL_APPROVE",
+        user=user,
+        target_type="ApprovalRequest",
+        target_id=request.id,
+    )
     db.commit()
     db.refresh(request)
     requester = db.get(User, request.requested_by)
@@ -321,6 +346,8 @@ def approve_request(
             "최종 승인 완료",
             [employee_email(requester.employee_id if requester else None), employee_email("admin001")],
             f"승인 요청 {request.id}이 최종 승인되었습니다.",
+            db=db,
+            user=user,
         )
     else:
         next_step = _current_step(db, request)
@@ -329,6 +356,8 @@ def approve_request(
             [employee_email(next_step.approver_employee_id), employee_email("admin001")],
             f"승인 요청 {request.id}이 {request.current_step}단계로 이동했습니다.",
             action_url=_approval_detail_url(request.id),
+            db=db,
+            user=user,
         )
     return _serialize_request(db, request)
 
@@ -380,6 +409,14 @@ def reject_request(
     ).all():
         task.status = "REJECTED"
 
+    log_audit(
+        db,
+        action="APPROVAL_REJECT",
+        user=user,
+        target_type="ApprovalRequest",
+        target_id=request.id,
+        message=payload.reject_reason,
+    )
     db.commit()
     db.refresh(request)
     requester = db.get(User, request.requested_by)
@@ -387,6 +424,8 @@ def reject_request(
         "승인 반려",
         [employee_email(requester.employee_id if requester else None)],
         f"승인 요청 {request.id}이 반려되었습니다.\n사유: {payload.reject_reason}",
+        db=db,
+        user=user,
     )
     return _serialize_request(db, request)
 
@@ -414,12 +453,22 @@ def request_edit_after_approval(
     ).all():
         task.status = "REJECTED"
 
+    log_audit(
+        db,
+        action="APPROVAL_EDIT_REQUEST",
+        user=user,
+        target_type="ApprovalRequest",
+        target_id=request.id,
+        message=payload.reason,
+    )
     db.commit()
     db.refresh(request)
     _notify(
         "승인 완료 건 수정 요청",
         [employee_email(requester.employee_id if requester else None), employee_email("admin001")],
         f"승인 요청 {request.id}에 수정 요청이 등록되었습니다.\n사유: {payload.reason}",
+        db=db,
+        user=user,
     )
     return _serialize_request(db, request)
 
@@ -430,6 +479,7 @@ def submit_approval(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    ensure_collection_open(db)
     ensure_can_write_org(user, org_id, db)
     org = db.get(Organization, org_id)
     if org is None:
@@ -493,6 +543,13 @@ def submit_approval(
     for task in tasks:
         task.status = "SUBMITTED"
 
+    log_audit(
+        db,
+        action="APPROVAL_SUBMIT",
+        user=user,
+        target_type="ApprovalRequest",
+        target_id=request.id,
+    )
     db.commit()
     db.refresh(request)
     _notify(
@@ -500,5 +557,7 @@ def submit_approval(
         [employee_email(path[0])],
         f"{org.part_name} 승인 요청 {request.id}이 제출되었습니다.",
         action_url=_approval_detail_url(request.id),
+        db=db,
+        user=user,
     )
     return _serialize_request(db, request)

@@ -1,5 +1,6 @@
 import { fetchJson } from "./api.js";
 import { renderAdminTaskQuery } from "./adminTaskQuery.js?v=20260421-review2";
+import { renderCollectionOpsManager } from "./collectionOps.js?v=20260425-one-time-ops";
 import { formatDday, renderDeadlineManager } from "./deadlineAdmin.js?v=20260421-p1b";
 import { renderOrganizationManager } from "./organizationAdmin.js?v=20260425-optional-division-head";
 import { renderPartMemberManager } from "./partMemberAdmin.js?v=20260425-part-member-admin";
@@ -49,14 +50,14 @@ export function sortDepartmentItems(items, sortKey) {
 
 export function approvalDonutStyle(statusCounts) {
   const values = [
-    ["PENDING", "#1f6feb"],
-    ["IN_PROGRESS", "#6f42c1"],
+    ["PENDING", "#8f6be8"],
+    ["IN_PROGRESS", "#5d3bb6"],
     ["APPROVED", "#1b7f4c"],
     ["REJECTED", "#c62828"],
   ];
   const total = values.reduce((sum, [key]) => sum + Number(statusCounts[key] || 0), 0);
   if (!total) {
-    return "background: #eceff3";
+    return "background: #eee8f8";
   }
   let cursor = 0;
   const stops = values.map(([key, color]) => {
@@ -220,6 +221,13 @@ export async function renderDashboard(container) {
         bodyId: "deadline-manager-root",
       })}
       ${renderAdminPanel({
+        id: "collection-ops",
+        title: "일회성 운영",
+        description: "취합 종료, 최종 Export, 메일 실패, 감사 로그를 확인합니다.",
+        open: true,
+        bodyId: "collection-ops-root",
+      })}
+      ${renderAdminPanel({
         id: "task-query",
         title: "전체 데이터 조회",
         description: "조직, 승인 상태, 판정 결과 기준으로 업무를 조회합니다.",
@@ -279,6 +287,7 @@ export async function renderDashboard(container) {
   bindAdminPanels(container);
   updateDepartmentRows();
   await renderDeadlineManager(container.querySelector("#deadline-manager-root"));
+  await renderCollectionOpsManager(container.querySelector("#collection-ops-root"));
   await renderAdminTaskQuery(container.querySelector("#admin-task-query-root"));
   await renderUserManager(container.querySelector("#user-manager-root"));
   await renderPartMemberManager(container.querySelector("#part-member-manager-root"));

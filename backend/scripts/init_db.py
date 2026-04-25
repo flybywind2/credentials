@@ -8,6 +8,7 @@ from backend.database import Base
 from backend.models import (
     ApprovalRequest,
     ApprovalStep,
+    AuditLog,
     ConfidentialQuestion,
     NationalTechQuestion,
     Organization,
@@ -119,9 +120,15 @@ def _ensure_incremental_columns(engine) -> None:
     if "system_settings" not in inspector.get_table_names():
         return
     columns = {column["name"] for column in inspector.get_columns("system_settings")}
-    if "description" not in columns:
-        with engine.begin() as connection:
+    with engine.begin() as connection:
+        if "description" not in columns:
             connection.execute(text("ALTER TABLE system_settings ADD COLUMN description TEXT"))
+        if "collection_locked" not in columns:
+            connection.execute(text("ALTER TABLE system_settings ADD COLUMN collection_locked BOOLEAN DEFAULT 0"))
+        if "collection_lock_reason" not in columns:
+            connection.execute(text("ALTER TABLE system_settings ADD COLUMN collection_lock_reason TEXT"))
+        if "collection_locked_at" not in columns:
+            connection.execute(text("ALTER TABLE system_settings ADD COLUMN collection_locked_at DATETIME"))
 
 
 def _ensure_uploaded_status_constraint(engine) -> None:

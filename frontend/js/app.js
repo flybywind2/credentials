@@ -14,11 +14,11 @@ const routes = {
 };
 
 const routeItems = [
-  { key: "inputter", label: "입력자", path: "/inputter", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
-  { key: "status", label: "내 파트 현황", path: "/status", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
-  { key: "group", label: "그룹 조회", path: "/group", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
-  { key: "approver", label: "승인자", path: "/approver", roles: ["APPROVER", "ADMIN"] },
-  { key: "admin", label: "관리자", path: "/admin", roles: ["ADMIN"] },
+  { key: "inputter", label: "업무 입력", path: "/inputter", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
+  { key: "status", label: "진행 현황", path: "/status", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
+  { key: "group", label: "그룹 업무 조회", path: "/group", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
+  { key: "approver", label: "승인 검토", path: "/approver", roles: ["APPROVER", "ADMIN"] },
+  { key: "admin", label: "시스템 관리", path: "/admin", roles: ["ADMIN"] },
 ];
 
 let activePopstateHandler = null;
@@ -50,7 +50,7 @@ export function routeFromPath(pathname = "/") {
 function renderNav(activeKey, userRole) {
   const visibleRoutes = availableRoutesForRole(userRole);
   return `
-    <nav class="role-nav" aria-label="역할 화면">
+    <nav class="role-nav" aria-label="주요 작업">
       ${visibleRoutes.map(({ key, label }) => `
         <button type="button" data-route="${key}" class="${key === activeKey ? "active" : ""}">
           ${label}

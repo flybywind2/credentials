@@ -53,6 +53,22 @@ def test_admin_imports_part_members_from_csv_with_knox_id(tmp_path):
         app.dependency_overrides.clear()
 
 
+def test_part_member_import_rejects_missing_required_headers(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        response = client.post(
+            "/api/part-members/import",
+            files={"file": ("members.csv", "파트명,이름\nAI전략실행파트,홍길동\n".encode("utf-8"), "text/csv")},
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+        assert response.status_code == 400
+        assert "knox_id" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_inputter_cannot_import_part_members_csv(tmp_path):
     client = _client(tmp_path)
 
@@ -60,6 +76,20 @@ def test_inputter_cannot_import_part_members_csv(tmp_path):
         response = client.post(
             "/api/part-members/import",
             files={"file": ("members.csv", CSV_TEXT.encode("utf-8"), "text/csv")},
+            headers={"X-Employee-Id": "part001"},
+        )
+
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_inputter_cannot_read_other_part_members(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        response = client.get(
+            "/api/part-members?org_id=2",
             headers={"X-Employee-Id": "part001"},
         )
 
@@ -111,5 +141,35 @@ def test_task_can_be_assigned_to_imported_part_members_by_knox_id(tmp_path):
 
         assert update_response.status_code == 200
         assert update_response.json()["assignees"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_task_assignment_rejects_unknown_knox_id(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        client.post(
+            "/api/part-members/import",
+            files={"file": ("members.csv", CSV_TEXT.encode("utf-8"), "text/csv")},
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+        response = client.post(
+            "/api/tasks",
+            json={
+                "organization_id": 1,
+                "sub_part": "배정오류",
+                "major_task": "인력 배정 오류 대업무",
+                "detail_task": "인력 배정 오류 세부업무",
+                "assignee_knox_ids": ["missing.member"],
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+            headers={"X-Employee-Id": "part001"},
+        )
+
+        assert response.status_code == 400
+        assert "파트 인력현황에 없는 담당자" in response.json()["detail"]
     finally:
         app.dependency_overrides.clear()

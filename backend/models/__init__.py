@@ -1,5 +1,6 @@
 from backend.models.approval import ApprovalRequest, ApprovalStep, ApprovalTaskReview
 from backend.models.organization import Organization
+from backend.models.operation import AuditLog
 from backend.models.part_member import PartMember, TaskAssignee
 from backend.models.question import (
     ColumnTooltip,
@@ -14,6 +15,7 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalStep",
     "ApprovalTaskReview",
+    "AuditLog",
     "ColumnTooltip",
     "ConfidentialQuestion",
     "NationalTechQuestion",

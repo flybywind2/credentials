@@ -8,6 +8,7 @@ from backend.database import get_db
 from backend.services.auth_tokens import create_access_token
 from backend.services.current_user import resolve_current_user_from_request
 from backend.services.sso import get_sso_adapter
+from backend.services.audit import log_audit
 from backend.services.user_mapping import resolve_app_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -27,6 +28,8 @@ def login(request: LoginRequest, db: Annotated[Session, Depends(get_db)]):
         attributes=identity.attributes,
         provider=identity.provider,
     )
+    log_audit(db, action="LOGIN", user=user, target_type="User", target_id=user["employee_id"])
+    db.commit()
     return {
         "access_token": create_access_token(user),
         "token_type": "bearer",
@@ -46,6 +49,8 @@ def saml_acs(
         attributes=identity.attributes,
         provider=identity.provider,
     )
+    log_audit(db, action="LOGIN", user=user, target_type="User", target_id=user["employee_id"])
+    db.commit()
     return {
         "access_token": create_access_token(user),
         "token_type": "bearer",

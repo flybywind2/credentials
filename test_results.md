@@ -48,13 +48,13 @@
 python -m pytest backend\tests -q -p no:cacheprovider
 ```
 
-결과: `136 passed in 5.16s`
+결과: `144 passed in 6.59s`
 
 ```powershell
 node --test frontend\tests\*.test.mjs
 ```
 
-결과: `89 passed`
+결과: `91 passed`
 
 ## 5. 추가 확인 및 수정
 
@@ -64,6 +64,10 @@ node --test frontend\tests\*.test.mjs
 - [x] 관리자 업로드 후 입력자가 파트원 기반 담당자 배정을 할 수 있는 흐름은 유지했다.
 - [x] 메일 발송은 `POST /send_mail`에 `{recipients, title, content}` JSON payload를 보내도록 확인했다.
 - [x] `docSecuType`, `contentType`, `recipientType` 조립은 사내 메일 라우터 책임으로 문서화했다.
+- [x] 승인 성공 경로의 단계별/최종 승인 메일 알림 테스트를 추가했다.
+- [x] broker SSO 모드에서 broker 사번 헤더 누락 시 401을 반환하는 테스트를 추가했다.
+- [x] 파트원 CSV 헤더 오류, 타 파트원 명단 조회 차단, 잘못된 knox_id 담당자 배정 차단 테스트를 추가했다.
+- [x] 일회성 취합 잠금, 최종 Export 이력, 감사 로그, 메일 실패 관리자 표시 테스트를 추가했다.
 
 ## 6. UI 버튼별 브라우저 검증
 

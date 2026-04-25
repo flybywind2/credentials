@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.dependencies import get_current_user, require_admin
 from backend.models import Organization, TaskEntry
+from backend.services.audit import log_audit
 from backend.services.excel import EXCEL_MIME_TYPE, write_workbook
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -83,8 +85,18 @@ def export_tasks_excel(
                 task.status,
             ]
         )
+    filename = f"confidential-classification-final-{date.today().isoformat()}.xlsx"
+    log_audit(
+        db,
+        action="EXPORT_FINAL",
+        user=user,
+        target_type="TaskEntry",
+        status="SUCCESS",
+        message=filename,
+    )
+    db.commit()
     return Response(
         content=write_workbook(rows, sheet_name="TaskExport"),
         media_type=EXCEL_MIME_TYPE,
-        headers={"Content-Disposition": 'attachment; filename="tasks-export.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

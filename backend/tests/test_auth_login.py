@@ -91,6 +91,23 @@ def test_broker_me_uses_broker_header_instead_of_dev_header_or_stale_token(monke
     assert body["sso_provider"] == "broker"
 
 
+def test_broker_me_requires_configured_employee_header(monkeypatch):
+    monkeypatch.setattr(
+        current_user_module,
+        "settings",
+        Settings(sso_mode="broker", sso_broker_employee_header="X-Broker-Employee-Id"),
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/auth/me",
+        headers={"X-Employee-Id": "admin001"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Broker employee header is required"
+
+
 def test_login_rejects_unknown_employee_id():
     client = TestClient(app)
 

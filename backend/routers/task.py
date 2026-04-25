@@ -18,7 +18,9 @@ from backend.models import (
     TaskQuestionCheck,
     User,
 )
+from backend.services.audit import log_audit
 from backend.services.classification import classify_from_answers
+from backend.services.collection import ensure_collection_open
 from backend.services.excel import EXCEL_MIME_TYPE, non_empty_rows, parse_workbook, write_workbook
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -596,6 +598,7 @@ async def import_tasks_from_excel(
     file: UploadFile = File(...),
     org_id: int | None = None,
 ):
+    ensure_collection_open(db)
     target_org_id = org_id or user["organization_id"]
     ensure_can_write_org(user, target_org_id, db)
     raw = await file.read()
@@ -606,6 +609,14 @@ async def import_tasks_from_excel(
 
     payloads = _payloads_from_excel_rows(rows, target_org_id)
     tasks = [_add_task(db, user, TaskCreate(**payload), status_name="UPLOADED") for payload in payloads]
+    log_audit(
+        db,
+        action="TASK_IMPORT",
+        user=user,
+        target_type="Organization",
+        target_id=target_org_id,
+        message=f"{len(tasks)} rows",
+    )
     db.commit()
     for task in tasks:
         db.refresh(task)
@@ -705,7 +716,9 @@ def create_task(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    ensure_collection_open(db)
     task = _add_task(db, user, payload)
+    log_audit(db, action="TASK_CREATE", user=user, target_type="TaskEntry", target_id=task.id)
     db.commit()
     db.refresh(task)
     return _serialize_task(db, task)
@@ -717,7 +730,15 @@ def create_tasks_bulk(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    ensure_collection_open(db)
     tasks = [_add_task(db, user, payload, status_name="UPLOADED") for payload in payloads]
+    log_audit(
+        db,
+        action="TASK_BULK_CREATE",
+        user=user,
+        target_type="TaskEntry",
+        message=f"{len(tasks)} rows",
+    )
     db.commit()
     for task in tasks:
         db.refresh(task)
@@ -734,6 +755,7 @@ def update_task(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    ensure_collection_open(db)
     task = db.get(TaskEntry, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -757,6 +779,7 @@ def update_task(
         _sync_task_assignees(db, task, assignee_knox_ids)
     if task.status == "UPLOADED":
         task.status = "DRAFT"
+    log_audit(db, action="TASK_UPDATE", user=user, target_type="TaskEntry", target_id=task.id)
     db.commit()
     db.refresh(task)
     return _serialize_task(db, task)
@@ -768,6 +791,7 @@ def delete_task(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    ensure_collection_open(db)
     task = db.get(TaskEntry, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -778,6 +802,14 @@ def delete_task(
     db.execute(delete(ApprovalTaskReview).where(ApprovalTaskReview.task_entry_id == task_id))
     db.execute(delete(TaskAssignee).where(TaskAssignee.task_entry_id == task_id))
     db.execute(delete(TaskQuestionCheck).where(TaskQuestionCheck.task_entry_id == task_id))
+    log_audit(
+        db,
+        action="TASK_DELETE",
+        user=user,
+        target_type="TaskEntry",
+        target_id=task_id,
+        message=task.major_task,
+    )
     db.delete(task)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

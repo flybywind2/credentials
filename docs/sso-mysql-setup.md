@@ -62,6 +62,7 @@ SSO_MODE=broker
 SSO_BROKER_EMPLOYEE_HEADER=X-Broker-Employee-Id
 SSO_BROKER_NAME_HEADER=X-Broker-Display-Name
 SSO_BROKER_EMAIL_HEADER=X-Broker-Email
+SSO_BROKER_DEPT_HEADER=deptname
 APP_BASE_URL=https://credential.example.internal
 ```
 
@@ -151,7 +152,9 @@ SAML 방식:
 Broker 방식:
 
 - `SSO_MODE=broker`에서는 `/api/auth/me`와 업무 API가 `SSO_BROKER_EMPLOYEE_HEADER`에 지정된 내부 헤더에서 사번을 읽는다.
-- 기본 헤더는 `X-Broker-Employee-Id`이며, 표시명과 메일은 선택적으로 `SSO_BROKER_NAME_HEADER`, `SSO_BROKER_EMAIL_HEADER`에서 읽는다.
+- 기본 사번 헤더는 `X-Broker-Employee-Id`이며, 표시명과 메일은 선택적으로 `SSO_BROKER_NAME_HEADER`, `SSO_BROKER_EMAIL_HEADER`에서 읽는다.
+- 소속 헤더 기본값은 `deptname`이다. broker의 `deptname`이 실/팀/그룹까지만 들어오는 경우 CSV로 import한 조직 정보의 `division_name`, `team_name`, `group_name`, `part_name`과 비교해 파트 후보가 1개로 확정될 때만 접속을 허용한다.
+- `deptname`으로 파트를 찾을 수 없거나 여러 파트가 매칭되어 확정할 수 없으면 409 `ORG_MAPPING_REQUIRED`를 반환하고, 프론트는 담당자에게 정보 등록을 요청하는 모달을 표시한다.
 - 개발용 `X-Employee-Id` fallback은 broker 모드에서 무시된다.
 - Reverse proxy나 broker 계층에서 외부 요청의 동일 헤더를 반드시 삭제하고 인증 후 재주입한다.
 

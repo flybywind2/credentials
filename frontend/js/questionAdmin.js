@@ -1,6 +1,7 @@
 import { fetchJson } from "./api.js";
 
 const NONE_OPTION = "해당 없음";
+const POSITIVE_OPTION = "해당 됨";
 
 const QUESTION_CONFIGS = [
   {
@@ -31,18 +32,7 @@ function escapeHtml(value) {
 }
 
 export function normalizeQuestionOptions(input) {
-  const seen = new Set();
-  return String(input ?? "")
-    .split(/[,\n;]/)
-    .map((option) => option.trim())
-    .filter((option) => option && option !== NONE_OPTION)
-    .filter((option) => {
-      if (seen.has(option)) {
-        return false;
-      }
-      seen.add(option);
-      return true;
-    });
+  return [POSITIVE_OPTION];
 }
 
 export function moveQuestionId(ids, questionId, direction) {
@@ -137,12 +127,10 @@ function renderQuestionPanel(config, questions, activeKey) {
         <label for="${config.inputPrefix}-text">문항
           <input id="${config.inputPrefix}-text" name="question_text" placeholder="예: 외부 공개가 제한되는 설계 정보가 포함됩니까?">
         </label>
-        <label for="${config.inputPrefix}-options">선택지
-          <textarea id="${config.inputPrefix}-options" name="options" placeholder="쉼표, 세미콜론 또는 줄바꿈으로 구분"></textarea>
-        </label>
+        <p class="muted-note">선택지는 “해당 없음”과 “해당 됨”으로 고정됩니다.</p>
         <p class="field-error" data-question-error="${config.key}"></p>
         <div class="question-admin-actions">
-          <span>“해당 없음”은 자동 포함됩니다.</span>
+          <span>선택지 수정 없이 문항만 추가합니다.</span>
           <button type="submit" class="primary-button">항목 추가</button>
         </div>
       </form>
@@ -160,18 +148,13 @@ function showQuestionError(container, key, message) {
 
 async function createQuestion(container, config, form) {
   const questionText = form.elements.question_text.value.trim();
-  const options = normalizeQuestionOptions(form.elements.options.value);
+  const options = normalizeQuestionOptions();
   showQuestionError(container, config.key, "");
 
   if (!questionText) {
     showQuestionError(container, config.key, "문항을 입력하세요.");
     return;
   }
-  if (!options.length) {
-    showQuestionError(container, config.key, "선택지를 1개 이상 입력하세요.");
-    return;
-  }
-
   await fetchJson(config.adminPath, {
     method: "POST",
     body: JSON.stringify({

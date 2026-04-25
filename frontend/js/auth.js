@@ -63,7 +63,15 @@ export async function loadCurrentUser() {
   const employeeId = savedEmployeeId();
   const accessToken = savedAccessToken();
   if (!employeeId && !accessToken) {
-    return null;
+    try {
+      const brokerUser = await fetchJson("/api/auth/me");
+      return brokerUser?.sso_provider === "broker" ? brokerUser : null;
+    } catch (error) {
+      if (error.status === 401) {
+        return null;
+      }
+      throw error;
+    }
   }
   return fetchJson("/api/auth/me");
 }

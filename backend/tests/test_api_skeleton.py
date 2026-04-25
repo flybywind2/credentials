@@ -29,8 +29,8 @@ def test_questions_returns_confidential_and_national_tech_questions():
     response = client.get("/api/questions")
     assert response.status_code == 200
     body = response.json()
-    assert body["confidential"][0]["options"][0] == "해당 없음"
-    assert body["national_tech"][0]["options"][0] == "해당 없음"
+    assert body["confidential"][0]["options"] == ["해당 없음", "해당 됨"]
+    assert body["national_tech"][0]["options"] == ["해당 없음", "해당 됨"]
 
 
 def test_pending_approvals_returns_sample_list():

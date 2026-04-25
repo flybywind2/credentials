@@ -46,6 +46,10 @@ function closeApprovalConfirm() {
   document.querySelector("#approval-confirm-modal")?.remove();
 }
 
+function closeInputGuide() {
+  document.querySelector("#input-guide-modal")?.remove();
+}
+
 function orgIdOf(user) {
   return Number(user?.organization_id || user?.organization?.id || 1);
 }
@@ -438,6 +442,52 @@ function openApprovalConfirmModal(rows, onConfirm) {
   document.body.append(overlay);
 }
 
+function openInputGuideModal() {
+  closeInputGuide();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "input-guide-modal";
+  overlay.innerHTML = `
+    <section class="modal input-guide-modal" role="dialog" aria-modal="true" aria-labelledby="input-guide-title">
+      <header class="modal-header">
+        <div>
+          <h2 id="input-guide-title">업무 입력 가이드</h2>
+          <p>업무 행을 추가하고 분류 저장 후 승인 요청까지 진행하는 순서입니다.</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
+      </header>
+      <div class="input-guide-body">
+        <section class="guide-step">
+          <strong>1. 직접 입력</strong>
+          <p>행 추가를 눌러 소파트, 대업무, 세부업무를 입력합니다. 행을 클릭하면 상세 입력 모달에서 담당자와 판정 정보를 보완할 수 있습니다.</p>
+        </section>
+        <section class="guide-step">
+          <strong>2. Excel Import 또는 붙여넣기</strong>
+          <p>양식은 소파트, 대업무, 세부업무 3개 컬럼만 사용합니다. 업로드 행은 먼저 UPLOADED 상태가 되며, 웹 상세 입력 모달에서 분류 저장을 완료해야 합니다.</p>
+        </section>
+        <section class="guide-step">
+          <strong>3. 기밀/국가핵심기술/Compliance 분류</strong>
+          <p>기밀과 국가핵심기술은 각 문항에서 해당 됨을 선택하면 해당으로 판정됩니다. 해당 상태이면 데이터 유형과 소유자/사용자 값을 입력해야 저장됩니다.</p>
+        </section>
+        <section class="guide-step">
+          <strong>4. 승인 요청 전 확인</strong>
+          <p>전체 저장으로 누락 값을 확인합니다. UPLOADED 행, 필수값 누락, 분류 메타데이터 누락이 있으면 승인 요청이 차단됩니다.</p>
+        </section>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="primary-button" data-action="confirm-guide">확인</button>
+      </div>
+    </section>
+  `;
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest(".icon-button, [data-action='confirm-guide']")) {
+      closeInputGuide();
+    }
+  });
+  bindModalAccessibility(overlay, closeInputGuide);
+  document.body.append(overlay);
+}
+
 async function openExcelPreviewModal(file, orgId, onSaveRows) {
   closePastePreview();
   const formData = new FormData();
@@ -698,6 +748,7 @@ export async function renderSpreadsheet(container, options = {}) {
         </div>
         <div class="toolbar">
           ${renderOrganizationSelector(editableOrganizations, selectedOrganization)}
+          <button type="button" class="secondary-button" data-action="input-guide">입력 가이드</button>
           <button type="button" class="secondary-button" data-action="add-row">행 추가</button>
           <button type="button" class="secondary-button" data-action="save-all">전체 저장</button>
           <button type="button" class="secondary-button" data-action="download-template">양식</button>
@@ -815,6 +866,10 @@ export async function renderSpreadsheet(container, options = {}) {
 
   container.querySelector("[data-action='paste-preview']").addEventListener("click", () => {
     openClipboardPreview();
+  });
+
+  container.querySelector("[data-action='input-guide']").addEventListener("click", () => {
+    openInputGuideModal();
   });
 
   container.querySelector("[data-action='save-all']").addEventListener("click", async () => {

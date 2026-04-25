@@ -108,6 +108,85 @@ def test_broker_me_requires_configured_employee_header(monkeypatch):
     assert response.json()["detail"] == "Broker employee header is required"
 
 
+def test_broker_me_maps_unique_deptname_to_imported_part(monkeypatch):
+    client = TestClient(app)
+    employee_id = f"dept{uuid4().hex[:8]}"
+    create_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "AI Development Office (AI Center)",
+            "division_head_name": "실장",
+            "division_head_id": f"{employee_id}-div",
+            "team_name": "Generative AI Team (AI Center)",
+            "team_head_name": "팀장",
+            "team_head_id": f"{employee_id}-team",
+            "group_name": "AI/IT Strategy Group (AI Center)",
+            "group_head_name": "그룹장",
+            "group_head_id": f"{employee_id}-group",
+            "part_name": "생성AI전략파트",
+            "part_head_name": "파트장",
+            "part_head_id": f"{employee_id}-part",
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert create_response.status_code == 201
+    org_id = create_response.json()["id"]
+    monkeypatch.setattr(
+        current_user_module,
+        "settings",
+        Settings(
+            sso_mode="broker",
+            sso_broker_employee_header="X-Broker-Employee-Id",
+            sso_broker_dept_header="deptname",
+        ),
+    )
+
+    try:
+        response = client.get(
+            "/api/auth/me",
+            headers={
+                "X-Broker-Employee-Id": employee_id,
+                "deptname": "AI/IT Strategy Group (AI Center)",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["employee_id"] == employee_id
+        assert body["role"] == "INPUTTER"
+        assert body["organization"]["id"] == org_id
+        assert body["organization"]["part_name"] == "생성AI전략파트"
+    finally:
+        monkeypatch.setattr(current_user_module, "settings", Settings())
+        client.delete(f"/api/admin/organizations/{org_id}", headers={"X-Employee-Id": "admin001"})
+
+
+def test_broker_me_requires_registration_when_deptname_has_no_part_match(monkeypatch):
+    monkeypatch.setattr(
+        current_user_module,
+        "settings",
+        Settings(
+            sso_mode="broker",
+            sso_broker_employee_header="X-Broker-Employee-Id",
+            sso_broker_dept_header="deptname",
+        ),
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/auth/me",
+        headers={
+            "X-Broker-Employee-Id": f"dept{uuid4().hex[:8]}",
+            "deptname": "Unregistered Group (AI Center)",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ORG_MAPPING_REQUIRED"
+    assert "담당자에게 정보 등록을 요청" in response.json()["detail"]["message"]
+
+
 def test_login_rejects_unknown_employee_id():
     client = TestClient(app)
 

@@ -16,6 +16,7 @@ class Settings:
     sso_broker_employee_header: str = os.getenv("SSO_BROKER_EMPLOYEE_HEADER", "X-Broker-Employee-Id")
     sso_broker_name_header: str = os.getenv("SSO_BROKER_NAME_HEADER", "")
     sso_broker_email_header: str = os.getenv("SSO_BROKER_EMAIL_HEADER", "")
+    sso_broker_dept_header: str = os.getenv("SSO_BROKER_DEPT_HEADER", "deptname")
     sso_ldap_bind_dn_template: str = os.getenv("SSO_LDAP_BIND_DN_TEMPLATE", "{employee_id}")
     sso_ldap_search_base: str = os.getenv("SSO_LDAP_SEARCH_BASE", "")
     sso_ldap_search_filter: str = os.getenv(

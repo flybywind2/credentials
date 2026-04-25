@@ -9,7 +9,7 @@ def test_confidential_questions_are_exposed_separately():
     response = client.get("/api/questions/confidential")
 
     assert response.status_code == 200
-    assert response.json()[0]["options"][0] == "해당 없음"
+    assert response.json()[0]["options"] == ["해당 없음", "해당 됨"]
 
 
 def test_admin_can_create_and_delete_confidential_question_with_none_option():
@@ -23,7 +23,7 @@ def test_admin_can_create_and_delete_confidential_question_with_none_option():
 
     assert create_response.status_code == 201
     created = create_response.json()
-    assert created["options"] == ["해당 없음", "설계자료"]
+    assert created["options"] == ["해당 없음", "해당 됨"]
 
     delete_response = client.delete(
         f"/api/admin/questions/confidential/{created['id']}",
@@ -43,7 +43,7 @@ def test_admin_can_create_and_delete_national_tech_question_with_none_option():
 
     assert create_response.status_code == 201
     created = create_response.json()
-    assert created["options"] == ["해당 없음", "공정기술"]
+    assert created["options"] == ["해당 없음", "해당 됨"]
 
     delete_response = client.delete(
         f"/api/admin/questions/national-tech/{created['id']}",

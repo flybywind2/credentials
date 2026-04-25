@@ -28,6 +28,11 @@ test("modal overlay sits above sticky data-table columns", () => {
   assert.ok(modalOverlayZ > stickyHeaderZ);
 });
 
+test("input guide modal has compact guided step styling", () => {
+  assert.match(css, /\.input-guide-modal\s*\{[\s\S]*width:\s*min\(760px,\s*100%\);/);
+  assert.match(css, /\.guide-step\s*\{[\s\S]*border:\s*1px solid var\(--accent-line\);/);
+});
+
 test("excel import file label uses button-like vertical centering", () => {
   const fileButtonBlock = css.match(/\.file-button\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
 

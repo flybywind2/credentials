@@ -37,7 +37,23 @@ export async function fetchJson(path, options = {}) {
     );
   }
   if (!response.ok) {
-    throw new Error(`${path} 요청 실패: ${response.status}`);
+    let errorBody = null;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = null;
+    }
+    const detail = errorBody?.detail;
+    const message = typeof detail === "object" && detail?.message
+      ? detail.message
+      : `${path} 요청 실패: ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    if (typeof detail === "object" && detail?.code) {
+      error.code = detail.code;
+      error.detail = detail;
+    }
+    throw error;
   }
   if (response.status === 204) {
     return null;

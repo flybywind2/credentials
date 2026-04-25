@@ -1,4 +1,5 @@
 import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260422-sso-token";
+import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { renderApproval } from "./approval.js?v=20260425-review-complete";
 import { renderDashboard } from "./dashboard.js?v=20260425-admin-scroll";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260425-group-pagination";
@@ -22,6 +23,15 @@ const routeItems = [
 ];
 
 let activePopstateHandler = null;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 export function availableRoutesForRole(role) {
   return routeItems.filter((item) => item.roles.includes(role));
@@ -111,7 +121,17 @@ function unbindPopstate() {
 async function init() {
   const userSummary = document.querySelector("#user-summary");
   const view = document.querySelector("#view");
-  const user = await loadCurrentUser();
+  let user = null;
+  try {
+    user = await loadCurrentUser();
+  } catch (error) {
+    if (isOrgMappingRequired(error)) {
+      renderLogin(view, userSummary);
+      showOrgMappingRequiredModal(error);
+      return;
+    }
+    throw error;
+  }
   if (!user) {
     renderLogin(view, userSummary);
     return;
@@ -138,6 +158,43 @@ function renderAuthenticatedSummary(userSummary, user, view) {
   });
 
   userSummary.replaceChildren(label, logoutButton);
+}
+
+function isOrgMappingRequired(error) {
+  return error?.code === "ORG_MAPPING_REQUIRED";
+}
+
+function showOrgMappingRequiredModal(error) {
+  document.querySelector("#org-mapping-required-modal")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "org-mapping-required-modal";
+  overlay.innerHTML = `
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="org-mapping-required-title">
+      <header class="modal-header">
+        <div>
+          <h2 id="org-mapping-required-title">소속 정보 등록 필요</h2>
+          <p>SSO에서 전달된 소속으로 파트 정보를 확정할 수 없습니다.</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
+      </header>
+      <div class="modal-body">
+        <p>${escapeHtml(error?.message || "담당자에게 정보 등록을 요청해 주세요.")}</p>
+        <p>CSV 조직 정보에 본인의 파트 정보가 등록된 뒤 다시 접속해 주세요.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="primary-button" data-action="confirm-org-mapping">확인</button>
+      </div>
+    </section>
+  `;
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest(".icon-button, [data-action='confirm-org-mapping']")) {
+      closeModal();
+    }
+  });
+  bindModalAccessibility(overlay, closeModal);
+  document.body.append(overlay);
 }
 
 function renderLogin(view, userSummary) {
@@ -171,6 +228,9 @@ function renderLogin(view, userSummary) {
       await navigate(nextRoute.key, user.role, view, { params: nextRoute.params, replace: true });
     } catch (loginError) {
       clearEmployeeId();
+      if (isOrgMappingRequired(loginError)) {
+        showOrgMappingRequiredModal(loginError);
+      }
       error.textContent = loginError.message;
     }
   });

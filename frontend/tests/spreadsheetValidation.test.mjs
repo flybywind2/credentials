@@ -45,6 +45,9 @@ test("spreadsheet source includes approval confirmation and excel preview flow",
   assert.match(spreadsheetSource, /status === "UPLOADED"/);
   assert.match(spreadsheetSource, /분류 저장 필요/);
   assert.match(spreadsheetSource, /data-action="save-all"/);
+  assert.match(spreadsheetSource, /data-action="input-guide"/);
+  assert.match(spreadsheetSource, /업무 입력 가이드/);
+  assert.match(spreadsheetSource, /승인 요청 전 확인/);
   assert.match(spreadsheetSource, /data-action="preview-save-selected"/);
   assert.match(spreadsheetSource, /data-action="preview-save-all"/);
 });

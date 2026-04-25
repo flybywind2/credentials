@@ -1481,6 +1481,37 @@ body {
   padding: 14px;
 }
 
+.input-guide-modal {
+  width: min(760px, 100%);
+}
+
+.input-guide-body {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.guide-step {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: var(--accent-softer);
+  border: 1px solid var(--accent-line);
+  border-radius: 6px;
+}
+
+.guide-step strong {
+  color: var(--accent-ink);
+  font-size: 13px;
+}
+
+.guide-step p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .paste-preview-body label {
   display: grid;
   gap: 8px;

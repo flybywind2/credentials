@@ -6,14 +6,15 @@ import { moveQuestionId, normalizeQuestionOptions } from "../js/questionAdmin.js
 
 const questionAdminSource = readFileSync(new URL("../js/questionAdmin.js", import.meta.url), "utf8");
 
-test("normalizeQuestionOptions trims, deduplicates, and omits none option", () => {
+test("normalizeQuestionOptions always returns the fixed positive classification option", () => {
   const options = normalizeQuestionOptions(" 해당 없음, 설계 자료\n공정 조건;설계 자료 ");
 
-  assert.deepEqual(options, ["설계 자료", "공정 조건"]);
+  assert.deepEqual(options, ["해당 됨"]);
 });
 
-test("normalizeQuestionOptions returns an empty list for blank option text", () => {
-  assert.deepEqual(normalizeQuestionOptions(" \n, ; "), []);
+test("question manager explains fixed classification choices", () => {
+  assert.match(questionAdminSource, /선택지는 “해당 없음”과 “해당 됨”으로 고정됩니다\./);
+  assert.doesNotMatch(questionAdminSource, /name="options"/);
 });
 
 test("moveQuestionId moves ids up and down without leaving bounds", () => {

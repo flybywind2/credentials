@@ -81,3 +81,31 @@ test("fetchJson explains network failures with single-port guidance", async () =
     globalThis.fetch = previousFetch;
   }
 });
+
+test("fetchJson preserves structured organization mapping errors", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({
+      detail: {
+        code: "ORG_MAPPING_REQUIRED",
+        message: "소속에 맞는 파트 정보가 없습니다. 담당자에게 정보 등록을 요청해 주세요.",
+      },
+    }),
+  });
+
+  try {
+    await assert.rejects(
+      () => fetchJson("/api/auth/me"),
+      (error) => {
+        assert.equal(error.status, 409);
+        assert.equal(error.code, "ORG_MAPPING_REQUIRED");
+        assert.match(error.message, /담당자에게 정보 등록/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

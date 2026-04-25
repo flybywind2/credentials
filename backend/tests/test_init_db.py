@@ -26,8 +26,8 @@ def test_initialize_database_rebuilds_and_seeds_sqlite_db(tmp_path: Path):
         assert session.scalar(select(Organization).limit(1)).part_name == "AI전략실행파트"
         assert session.scalar(select(User).limit(1)).email == "admin001@samsung.com"
         assert session.scalar(select(TaskEntry).limit(1)).major_task == "기밀 분류 체계 수립"
-        assert session.scalar(select(ConfidentialQuestion).limit(1)).options[0] == "해당 없음"
-        assert session.scalar(select(NationalTechQuestion).limit(1)).options[0] == "해당 없음"
+        assert session.scalar(select(ConfidentialQuestion).limit(1)).options == ["해당 없음", "해당 됨"]
+        assert session.scalar(select(NationalTechQuestion).limit(1)).options == ["해당 없음", "해당 됨"]
         assert session.scalar(select(ApprovalRequest).limit(1)).total_steps == 3
     finally:
         session.close()

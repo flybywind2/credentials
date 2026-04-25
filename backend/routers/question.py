@@ -12,6 +12,7 @@ from backend.models import ConfidentialQuestion, NationalTechQuestion
 router = APIRouter(prefix="/questions", tags=["questions"])
 admin_router = APIRouter(prefix="/admin/questions", tags=["admin-questions"])
 QuestionModel: TypeAlias = ConfidentialQuestion | NationalTechQuestion
+CLASSIFICATION_OPTIONS = ["해당 없음", "해당 됨"]
 
 
 class QuestionCreate(BaseModel):
@@ -25,15 +26,14 @@ class QuestionReorder(BaseModel):
 
 
 def _with_none_option(options: list[str]) -> list[str]:
-    cleaned = [option for option in options if option and option != "해당 없음"]
-    return ["해당 없음", *cleaned]
+    return CLASSIFICATION_OPTIONS.copy()
 
 
 def _serialize(question: QuestionModel) -> dict:
     return {
         "id": question.id,
         "question_text": question.question_text,
-        "options": question.options,
+        "options": CLASSIFICATION_OPTIONS.copy(),
         "is_active": question.is_active,
         "sort_order": question.sort_order,
     }

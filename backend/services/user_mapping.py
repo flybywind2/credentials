@@ -47,6 +47,18 @@ def _email(employee_id: str, attributes: dict[str, Any]) -> str:
     return str(value) if value else f"{employee_id}@samsung.com"
 
 
+def _org_mapping_required(deptname: str | None) -> HTTPException:
+    suffix = f" 현재 SSO 소속: {deptname}" if deptname else ""
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "ORG_MAPPING_REQUIRED",
+            "message": f"소속에 맞는 파트 정보가 없습니다. 담당자에게 정보 등록을 요청해 주세요.{suffix}",
+            "deptname": deptname,
+        },
+    )
+
+
 def _serialize_org(org: Organization | dict[str, Any] | None) -> dict[str, Any] | None:
     if org is None:
         return None
@@ -170,6 +182,55 @@ def _resolve_org_head(
     )
 
 
+def _deptname_candidates(deptname: str | None) -> list[str]:
+    value = str(deptname or "").strip()
+    if not value:
+        return []
+    without_parentheses = value.split("(", 1)[0].strip()
+    candidates = [value]
+    if without_parentheses and without_parentheses != value:
+        candidates.append(without_parentheses)
+    return candidates
+
+
+def _resolve_broker_dept_user(
+    employee_id: str,
+    db: Session | None,
+    attributes: dict[str, Any],
+    provider: str | None,
+) -> dict[str, Any] | None:
+    if db is None or provider != "broker":
+        return None
+
+    candidates = _deptname_candidates(attributes.get("deptname"))
+    if not candidates:
+        raise _org_mapping_required(None)
+
+    organizations = db.scalars(
+        select(Organization)
+        .where(
+            or_(
+                Organization.part_name.in_(candidates),
+                Organization.group_name.in_(candidates),
+                Organization.team_name.in_(candidates),
+                Organization.division_name.in_(candidates),
+            )
+        )
+        .order_by(Organization.id)
+    ).all()
+    if len(organizations) != 1:
+        raise _org_mapping_required(str(attributes.get("deptname") or ""))
+
+    return _user_payload(
+        employee_id=employee_id,
+        name=_display_name(attributes, employee_id),
+        role="INPUTTER",
+        organization=organizations[0],
+        attributes=attributes,
+        provider=provider,
+    )
+
+
 def resolve_app_user(
     employee_id: str,
     db: Session | None = None,
@@ -195,6 +256,10 @@ def resolve_app_user(
             attributes=directory_attributes,
             provider=provider,
         )
+
+    broker_dept_user = _resolve_broker_dept_user(employee_id, db, directory_attributes, provider)
+    if broker_dept_user:
+        return broker_dept_user
 
     mock_user = get_mock_user(employee_id)
     if mock_user:

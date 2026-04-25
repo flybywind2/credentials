@@ -29,10 +29,13 @@ def _broker_attributes(request: Request) -> dict[str, str]:
     attributes = {}
     name = _configured_header(request, settings.sso_broker_name_header)
     email = _configured_header(request, settings.sso_broker_email_header)
+    deptname = _configured_header(request, settings.sso_broker_dept_header)
     if name:
         attributes["displayName"] = name
     if email:
         attributes["email"] = email
+    if deptname:
+        attributes["deptname"] = deptname
     return attributes
 
 

@@ -202,6 +202,27 @@ body {
   justify-content: flex-end;
 }
 
+.work-org-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.work-org-selector select {
+  min-width: 220px;
+  max-width: 420px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
 .primary-button {
   padding: 0 14px;
   background: var(--accent);
@@ -380,6 +401,11 @@ body {
 .badge.status-draft {
   background: #eef0f3;
   color: #4b5563;
+}
+
+.badge.status-uploaded {
+  background: #fff4de;
+  color: #8a5a00;
 }
 
 .badge.status-submitted,
@@ -653,16 +679,98 @@ body {
 .deadline-admin-section,
 .admin-query-section,
 .user-admin-section,
-.tooltip-admin-section {
+.tooltip-admin-section,
+.part-member-section {
   border-top: 1px solid var(--line);
+}
+
+.admin-panel {
+  border-top: 1px solid var(--line);
+}
+
+.admin-panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-panel-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.admin-panel-header p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-panel-body[hidden] {
+  display: none;
+}
+
+.admin-panel-body > section {
+  border-top: 0;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.pagination-bar button:disabled {
+  color: #98a2b3;
+  cursor: default;
+  background: #f2f4f7;
 }
 
 .department-summary-header,
 .deadline-admin-header,
 .admin-query-header,
 .user-admin-header,
-.tooltip-admin-header {
+.tooltip-admin-header,
+.part-member-header {
   border-bottom: 0;
+}
+
+.part-member-table {
+  min-width: 720px;
+}
+
+.part-member-table-wrap {
+  max-height: 260px;
+}
+
+.assignee-dropdown {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.assignee-dropdown summary {
+  min-height: 36px;
+  padding: 9px 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.assignee-choice-list {
+  padding: 10px;
+  border-top: 1px solid var(--line);
 }
 
 .deadline-form,
@@ -779,6 +887,9 @@ body {
 
 .file-button {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
 
@@ -1133,12 +1244,12 @@ body {
 
 .detail-grid input[aria-invalid="true"],
 .detail-grid textarea[aria-invalid="true"],
-.dependent-grid input[aria-invalid="true"] {
+.dependent-grid input:not([type="radio"]):not([type="checkbox"])[aria-invalid="true"] {
   border-color: var(--danger);
 }
 
 .detail-grid input:disabled,
-.dependent-grid input:disabled {
+.dependent-grid input:not([type="radio"]):not([type="checkbox"]):disabled {
   background: #f2f4f7;
   color: #98a2b3;
 }
@@ -1187,6 +1298,23 @@ body {
   margin: 0;
 }
 
+.choice-chip input[type="checkbox"],
+.choice-chip input[type="radio"] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  padding: 0;
+}
+
+.choice-chip input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+}
+
 .dependent-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1194,7 +1322,7 @@ body {
   padding: 14px;
 }
 
-.dependent-grid label,
+.dependent-grid label:not(.choice-chip),
 .field-group {
   display: grid;
   gap: 6px;
@@ -1203,7 +1331,7 @@ body {
   font-weight: 700;
 }
 
-.dependent-grid input {
+.dependent-grid input:not([type="radio"]):not([type="checkbox"]) {
   min-height: 38px;
   padding: 0 10px;
   color: var(--text);
@@ -1216,6 +1344,19 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.radio-group .choice-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.radio-group .choice-chip span {
+  line-height: 1;
 }
 
 .toggle-row {
@@ -1264,6 +1405,52 @@ body {
   border-radius: 6px;
   font: inherit;
   resize: vertical;
+}
+
+.excel-paste-grid {
+  display: grid;
+  gap: 0;
+  min-height: 126px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+}
+
+.excel-paste-grid:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.14);
+}
+
+.excel-paste-grid-header,
+.excel-paste-grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1.5fr;
+}
+
+.excel-paste-grid-header span,
+.excel-paste-grid-row span {
+  min-height: 40px;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.excel-paste-grid-header span {
+  color: var(--muted);
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.excel-paste-grid-header span:last-child,
+.excel-paste-grid-row span:last-child {
+  border-right: 0;
+}
+
+.excel-paste-grid-row:last-child span {
+  border-bottom: 0;
 }
 
 .preview-summary {

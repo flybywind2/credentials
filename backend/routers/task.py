@@ -11,9 +11,9 @@ from backend.dependencies import ensure_can_write_org, get_current_user, require
 from backend.models import (
     ApprovalRequest,
     ApprovalTaskReview,
-    ConfidentialQuestion,
-    NationalTechQuestion,
     Organization,
+    PartMember,
+    TaskAssignee,
     TaskEntry,
     TaskQuestionCheck,
     User,
@@ -67,6 +67,7 @@ class TaskCreate(BaseModel):
     is_compliance: bool = False
     comp_data_type: str | None = None
     comp_owner_user: str | None = None
+    assignee_knox_ids: list[str] | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -86,6 +87,7 @@ class TaskUpdate(BaseModel):
     is_compliance: bool | None = None
     comp_data_type: str | None = None
     comp_owner_user: str | None = None
+    assignee_knox_ids: list[str] | None = None
 
 
 class TaskValidationRow(BaseModel):
@@ -261,6 +263,68 @@ def _latest_task_review(db: Session, task_id: int) -> ApprovalTaskReview | None:
     )
 
 
+def _serialize_task_assignees(db: Session, task_id: int) -> list[dict]:
+    assignees = db.scalars(
+        select(TaskAssignee)
+        .where(TaskAssignee.task_entry_id == task_id)
+        .order_by(TaskAssignee.name, TaskAssignee.knox_id)
+    ).all()
+    return [
+        {
+            "name": assignee.name,
+            "knox_id": assignee.knox_id,
+            "part_name": assignee.part_name,
+        }
+        for assignee in assignees
+    ]
+
+
+def _normalize_knox_ids(knox_ids: list[str] | None) -> list[str]:
+    normalized = []
+    seen = set()
+    for raw in knox_ids or []:
+        knox_id = str(raw or "").strip()
+        if not knox_id or knox_id in seen:
+            continue
+        normalized.append(knox_id)
+        seen.add(knox_id)
+    return normalized
+
+
+def _sync_task_assignees(db: Session, task: TaskEntry, knox_ids: list[str] | None) -> None:
+    selected_knox_ids = _normalize_knox_ids(knox_ids)
+    db.execute(delete(TaskAssignee).where(TaskAssignee.task_entry_id == task.id))
+    if not selected_knox_ids:
+        return
+
+    org = db.get(Organization, task.organization_id)
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    members = db.scalars(
+        select(PartMember)
+        .where(PartMember.organization_id == task.organization_id)
+        .where(PartMember.part_name == org.part_name)
+        .where(PartMember.knox_id.in_(selected_knox_ids))
+    ).all()
+    members_by_knox_id = {member.knox_id: member for member in members}
+    missing = [knox_id for knox_id in selected_knox_ids if knox_id not in members_by_knox_id]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"파트 인력현황에 없는 담당자입니다: {', '.join(missing)}",
+        )
+    for knox_id in selected_knox_ids:
+        member = members_by_knox_id[knox_id]
+        db.add(
+            TaskAssignee(
+                task_entry_id=task.id,
+                part_name=member.part_name,
+                name=member.name,
+                knox_id=member.knox_id,
+            )
+        )
+
+
 def _serialize_rejection_reviews(db: Session, approval_request_id: int) -> list[dict]:
     reviews = db.scalars(
         select(ApprovalTaskReview)
@@ -312,77 +376,17 @@ def _serialize_task(db: Session, task: TaskEntry) -> dict:
         "related_menu": task.related_menu,
         "share_scope": task.share_scope,
         "status": task.status,
+        "assignees": _serialize_task_assignees(db, task.id),
         "latest_review": _serialize_task_review(db, _latest_task_review(db, task.id)),
     }
 
 
-def _active_questions(db: Session) -> tuple[list[ConfidentialQuestion], list[NationalTechQuestion]]:
-    confidential = db.scalars(
-        select(ConfidentialQuestion)
-        .where(ConfidentialQuestion.is_active.is_(True))
-        .order_by(ConfidentialQuestion.sort_order, ConfidentialQuestion.id)
-    ).all()
-    national_tech = db.scalars(
-        select(NationalTechQuestion)
-        .where(NationalTechQuestion.is_active.is_(True))
-        .order_by(NationalTechQuestion.sort_order, NationalTechQuestion.id)
-    ).all()
-    return confidential, national_tech
-
-
-def _excel_headers(
-    confidential: list[ConfidentialQuestion],
-    national_tech: list[NationalTechQuestion],
-) -> list[str]:
-    return (
-        ["소파트", "대업무", "세부업무"]
-        + [f"기밀 문항 {index}" for index, _ in enumerate(confidential, start=1)]
-        + ["기밀 데이터 유형", "기밀 소유자/사용자"]
-        + [f"국가핵심기술 문항 {index}" for index, _ in enumerate(national_tech, start=1)]
-        + ["국가핵심기술 데이터 유형", "국가핵심기술 소유자/사용자"]
-        + [
-            "Compliance 해당",
-            "Compliance 데이터 유형",
-            "Compliance 소유자/사용자",
-            "보관 장소",
-            "관련 메뉴",
-            "공유 범위",
-        ]
-    )
-
-
-def _split_options(value: str | None) -> list[str]:
-    if not value:
-        return []
-    normalized = value.replace(",", ";")
-    return [item.strip() for item in normalized.split(";") if item.strip()]
-
-
-def _owner_value(value: str | None) -> str:
-    owner_map = {"소유자": "OWNER", "사용자": "USER", "OWNER": "OWNER", "USER": "USER"}
-    return owner_map.get((value or "").strip(), "")
-
-
-def _share_scope_value(value: str | None) -> str:
-    scope_map = {
-        "부문/사업부": "DIVISION_BU",
-        "사업부": "BUSINESS_UNIT",
-        "실/팀/그룹": "ORG_UNIT",
-        "DIVISION_BU": "DIVISION_BU",
-        "BUSINESS_UNIT": "BUSINESS_UNIT",
-        "ORG_UNIT": "ORG_UNIT",
-    }
-    return scope_map.get((value or "").strip(), "")
-
-
-def _truthy(value: str | None) -> bool:
-    return (value or "").strip().upper() in {"Y", "YES", "TRUE", "1", "해당"}
+def _excel_headers() -> list[str]:
+    return ["소파트", "대업무", "세부업무"]
 
 
 def _payloads_from_excel_rows(
     rows: list[list[str]],
-    confidential: list[ConfidentialQuestion],
-    national_tech: list[NationalTechQuestion],
     organization_id: int,
 ) -> list[dict]:
     if not rows:
@@ -391,45 +395,31 @@ def _payloads_from_excel_rows(
     payloads = []
     for row in rows[1:]:
         values = {header: row[index] if index < len(row) else "" for index, header in enumerate(headers)}
-        confidential_answers = [
-            {
-                "question_id": question.id,
-                "selected_options": _split_options(values.get(f"기밀 문항 {index}")),
-            }
-            for index, question in enumerate(confidential, start=1)
-        ]
-        national_tech_answers = [
-            {
-                "question_id": question.id,
-                "selected_options": _split_options(values.get(f"국가핵심기술 문항 {index}")),
-            }
-            for index, question in enumerate(national_tech, start=1)
-        ]
         payloads.append(
             {
                 "organization_id": organization_id,
                 "sub_part": values.get("소파트") or None,
                 "major_task": values.get("대업무") or "",
                 "detail_task": values.get("세부업무") or "",
-                "confidential_answers": confidential_answers,
-                "conf_data_type": values.get("기밀 데이터 유형") or "",
-                "conf_owner_user": _owner_value(values.get("기밀 소유자/사용자")),
-                "national_tech_answers": national_tech_answers,
-                "ntech_data_type": values.get("국가핵심기술 데이터 유형") or "",
-                "ntech_owner_user": _owner_value(values.get("국가핵심기술 소유자/사용자")),
-                "is_compliance": _truthy(values.get("Compliance 해당")),
-                "comp_data_type": values.get("Compliance 데이터 유형") or "",
-                "comp_owner_user": _owner_value(values.get("Compliance 소유자/사용자")),
-                "storage_location": values.get("보관 장소") or "",
-                "related_menu": values.get("관련 메뉴") or "",
-                "share_scope": _share_scope_value(values.get("공유 범위")),
+                "confidential_answers": [],
+                "conf_data_type": "",
+                "conf_owner_user": "",
+                "national_tech_answers": [],
+                "ntech_data_type": "",
+                "ntech_owner_user": "",
+                "is_compliance": False,
+                "comp_data_type": "",
+                "comp_owner_user": "",
+                "storage_location": "",
+                "related_menu": "",
+                "share_scope": "",
             }
         )
     return payloads
 
 
-def _add_task(db: Session, user: dict, payload: TaskCreate) -> TaskEntry:
-    ensure_can_write_org(user, payload.organization_id)
+def _add_task(db: Session, user: dict, payload: TaskCreate, status_name: str = "DRAFT") -> TaskEntry:
+    ensure_can_write_org(user, payload.organization_id, db)
     if db.get(Organization, payload.organization_id) is None:
         raise HTTPException(status_code=404, detail="Organization not found")
     creator = _ensure_user_row(db, user)
@@ -451,12 +441,14 @@ def _add_task(db: Session, user: dict, payload: TaskCreate) -> TaskEntry:
         storage_location=_none_if_blank(payload.storage_location),
         related_menu=_none_if_blank(payload.related_menu),
         share_scope=_none_if_blank(payload.share_scope),
-        status="DRAFT",
+        status=status_name,
     )
     db.add(task)
     db.flush()
     _sync_question_checks(db, task.id, "CONFIDENTIAL", payload.confidential_answers)
     _sync_question_checks(db, task.id, "NATIONAL_TECH", payload.national_tech_answers)
+    if payload.assignee_knox_ids is not None:
+        _sync_task_assignees(db, task, payload.assignee_knox_ids)
     return task
 
 
@@ -506,7 +498,7 @@ def read_part_status(
         .where(TaskEntry.organization_id == target_org_id)
         .group_by(TaskEntry.status)
     ).all()
-    counts = {"DRAFT": 0, "SUBMITTED": 0, "APPROVED": 0, "REJECTED": 0}
+    counts = {"UPLOADED": 0, "DRAFT": 0, "SUBMITTED": 0, "APPROVED": 0, "REJECTED": 0}
     for status_name, count in rows:
         counts[status_name] = count
     return {
@@ -548,8 +540,7 @@ def download_task_template(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     _ensure_can_read_task_org(user, user["organization_id"], db)
-    confidential, national_tech = _active_questions(db)
-    content = write_workbook([_excel_headers(confidential, national_tech)])
+    content = write_workbook([_excel_headers()])
     return Response(
         content=content,
         media_type=EXCEL_MIME_TYPE,
@@ -606,16 +597,15 @@ async def import_tasks_from_excel(
     org_id: int | None = None,
 ):
     target_org_id = org_id or user["organization_id"]
-    ensure_can_write_org(user, target_org_id)
+    ensure_can_write_org(user, target_org_id, db)
     raw = await file.read()
     try:
         rows = non_empty_rows(parse_workbook(raw))
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid Excel workbook") from exc
 
-    confidential, national_tech = _active_questions(db)
-    payloads = _payloads_from_excel_rows(rows, confidential, national_tech, target_org_id)
-    tasks = [_add_task(db, user, TaskCreate(**payload)) for payload in payloads]
+    payloads = _payloads_from_excel_rows(rows, target_org_id)
+    tasks = [_add_task(db, user, TaskCreate(**payload), status_name="UPLOADED") for payload in payloads]
     db.commit()
     for task in tasks:
         db.refresh(task)
@@ -633,24 +623,23 @@ async def preview_tasks_from_excel(
     org_id: int | None = None,
 ):
     target_org_id = org_id or user["organization_id"]
-    ensure_can_write_org(user, target_org_id)
+    ensure_can_write_org(user, target_org_id, db)
     raw = await file.read()
     try:
         rows = non_empty_rows(parse_workbook(raw))
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid Excel workbook") from exc
 
-    confidential, national_tech = _active_questions(db)
-    payloads = _payloads_from_excel_rows(rows, confidential, national_tech, target_org_id)
+    payloads = _payloads_from_excel_rows(rows, target_org_id)
     validation_rows = [TaskValidationRow(**payload) for payload in payloads]
-    validation = _validate_task_rows(validation_rows, user)
+    validation = _validate_task_rows(validation_rows, user, db)
     return {
         "rows": payloads,
         **validation,
     }
 
 
-def _validate_task_rows(rows: list[TaskValidationRow], user: dict) -> dict:
+def _validate_task_rows(rows: list[TaskValidationRow], user: dict, db: Session | None = None) -> dict:
     errors = []
     valid_count = 0
     for index, row in enumerate(rows):
@@ -659,8 +648,7 @@ def _validate_task_rows(rows: list[TaskValidationRow], user: dict) -> dict:
             row_errors.append(("organization_id", "조직 ID는 필수입니다."))
         else:
             try:
-                if user["role"] != "ADMIN" and user["organization_id"] != row.organization_id:
-                    raise HTTPException(status_code=403, detail="Insufficient permissions")
+                ensure_can_write_org(user, row.organization_id, db)
             except HTTPException:
                 row_errors.append(("organization_id", "조직 접근 권한이 없습니다."))
         if not row.major_task:
@@ -706,8 +694,9 @@ def _validate_task_rows(rows: list[TaskValidationRow], user: dict) -> dict:
 def validate_tasks(
     payload: TaskValidationRequest,
     user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    return _validate_task_rows(payload.rows, user)
+    return _validate_task_rows(payload.rows, user, db)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -728,7 +717,7 @@ def create_tasks_bulk(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    tasks = [_add_task(db, user, payload) for payload in payloads]
+    tasks = [_add_task(db, user, payload, status_name="UPLOADED") for payload in payloads]
     db.commit()
     for task in tasks:
         db.refresh(task)
@@ -748,8 +737,11 @@ def update_task(
     task = db.get(TaskEntry, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    ensure_can_write_org(user, task.organization_id)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    ensure_can_write_org(user, task.organization_id, db)
+    update_data = payload.model_dump(exclude_unset=True)
+    assignee_update_requested = "assignee_knox_ids" in update_data
+    assignee_knox_ids = update_data.pop("assignee_knox_ids", None)
+    for key, value in update_data.items():
         if key == "confidential_answers":
             task.is_confidential = classify_from_answers(_answer_options(value))
             _sync_question_checks(db, task.id, "CONFIDENTIAL", value)
@@ -761,6 +753,10 @@ def update_task(
         if isinstance(value, str):
             value = _none_if_blank(value)
         setattr(task, key, value)
+    if assignee_update_requested:
+        _sync_task_assignees(db, task, assignee_knox_ids)
+    if task.status == "UPLOADED":
+        task.status = "DRAFT"
     db.commit()
     db.refresh(task)
     return _serialize_task(db, task)
@@ -775,11 +771,12 @@ def delete_task(
     task = db.get(TaskEntry, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    ensure_can_write_org(user, task.organization_id)
+    ensure_can_write_org(user, task.organization_id, db)
     creator = db.get(User, task.created_by)
     if user["role"] != "ADMIN" and (creator is None or creator.employee_id != user["employee_id"]):
         raise HTTPException(status_code=403, detail="Only the creator can delete this task")
     db.execute(delete(ApprovalTaskReview).where(ApprovalTaskReview.task_entry_id == task_id))
+    db.execute(delete(TaskAssignee).where(TaskAssignee.task_entry_id == task_id))
     db.execute(delete(TaskQuestionCheck).where(TaskQuestionCheck.task_entry_id == task_id))
     db.delete(task)
     db.commit()

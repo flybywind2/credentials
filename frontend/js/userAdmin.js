@@ -1,4 +1,5 @@
 import { fetchJson } from "./api.js";
+import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 
 const ROLE_OPTIONS = [
   ["ADMIN", "관리자"],
@@ -109,11 +110,15 @@ export async function renderUserManager(container) {
     fetchJson("/api/organizations"),
   ]);
   let currentUsers = users;
+  let currentPage = 1;
 
   function updateRows() {
     const keyword = container.querySelector("[name='user_search']")?.value || "";
     currentUsers = filterUserRows(users, keyword);
-    container.querySelector("[data-user-table-body]").innerHTML = renderUserRows(currentUsers);
+    const page = paginateItems(currentUsers, currentPage);
+    currentPage = page.page;
+    container.querySelector("[data-user-table-body]").innerHTML = renderUserRows(page.items);
+    container.querySelector("[data-user-pagination]").innerHTML = renderPaginationControls(page, "users");
   }
 
   container.innerHTML = `
@@ -153,8 +158,9 @@ export async function renderUserManager(container) {
             <thead>
               <tr><th>사번</th><th>이름</th><th>권한</th><th>담당 조직</th><th>소스</th><th>작업</th></tr>
             </thead>
-            <tbody data-user-table-body>${renderUserRows(currentUsers)}</tbody>
+            <tbody data-user-table-body></tbody>
           </table>
+          <div data-user-pagination></div>
         </div>
       </div>
     </section>
@@ -163,7 +169,19 @@ export async function renderUserManager(container) {
   const form = container.querySelector("[data-user-form]");
   fillUserForm(form, {}, organizations);
 
-  container.querySelector("[name='user_search']").addEventListener("input", updateRows);
+  updateRows();
+  container.querySelector("[name='user_search']").addEventListener("input", () => {
+    currentPage = 1;
+    updateRows();
+  });
+  container.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page-action]");
+    if (!button || !button.closest("[data-pagination-target='users']")) {
+      return;
+    }
+    currentPage += button.dataset.pageAction === "next" ? 1 : -1;
+    updateRows();
+  });
   container.querySelector("[data-action='reset-user-form']").addEventListener("click", () => {
     showError(container, "");
     fillUserForm(form, {}, organizations);

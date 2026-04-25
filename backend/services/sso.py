@@ -33,12 +33,22 @@ class MockSsoAdapter:
 
     def authenticate(self, employee_id: str, password: str | None = None) -> AuthenticatedIdentity:
         user = get_mock_user(employee_id)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Unknown employee_id")
+        attributes = {"name": user["name"], "email": user["email"]} if user else {}
         return AuthenticatedIdentity(
             employee_id=employee_id,
             provider=self.provider,
-            attributes={"name": user["name"], "email": user["email"]},
+            attributes=attributes,
+        )
+
+
+@dataclass(frozen=True)
+class BrokerSsoAdapter:
+    provider: str = "broker"
+
+    def authenticate(self, employee_id: str, password: str | None = None) -> AuthenticatedIdentity:
+        raise HTTPException(
+            status_code=400,
+            detail="Broker SSO uses the configured broker header instead of form login",
         )
 
 
@@ -248,6 +258,8 @@ def get_sso_adapter(mode: str | None = None) -> SsoAdapter:
     selected_mode = (mode or settings.sso_mode).lower()
     if selected_mode == "mock":
         return MockSsoAdapter()
+    if selected_mode == "broker":
+        return BrokerSsoAdapter()
     if selected_mode == "ldap":
         return LdapSsoAdapter(
             provider_url=settings.sso_provider_url,

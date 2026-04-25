@@ -1,4 +1,5 @@
 import { fetchJson } from "./api.js";
+import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 
 const CSV_HEADERS = [
   "실명",
@@ -102,7 +103,7 @@ export function parseOrganizationCsvPreview(text) {
       mapped[targetKey] = source[sourceKey] || "";
     });
     mapped.org_type = orgTypeFromRow(source);
-    mapped.division_head_email = `${mapped.division_head_id}@samsung.com`;
+    mapped.division_head_email = mapped.division_head_id ? `${mapped.division_head_id}@samsung.com` : "";
     mapped.part_head_email = `${mapped.part_head_id}@samsung.com`;
     return mapped;
   });
@@ -212,8 +213,8 @@ export async function renderOrganizationManager(container) {
           <h3 data-form-title>조직 추가</h3>
           <div class="admin-form-grid">
             <label>실명 <input name="division_name" required></label>
-            <label>실장명 <input name="division_head_name" required></label>
-            <label>실장ID <input name="division_head_id" required></label>
+            <label>실장명 <input name="division_head_name"></label>
+            <label>실장ID <input name="division_head_id"></label>
             <label>팀명 <input name="team_name"></label>
             <label>팀장명 <input name="team_head_name"></label>
             <label>팀장ID <input name="team_head_id"></label>
@@ -248,20 +249,29 @@ export async function renderOrganizationManager(container) {
       <div class="table-wrap compact-table-wrap">
         <table class="compact-table">
           <thead><tr><th>실</th><th>팀</th><th>그룹</th><th>파트</th><th>파트장ID</th><th>유형</th><th>작업</th></tr></thead>
-          <tbody>${renderOrganizationRows(organizations)}</tbody>
+          <tbody data-organization-table-body></tbody>
         </table>
+        <div data-organization-pagination></div>
       </div>
     </section>
   `;
 
   const form = container.querySelector("[data-organization-form]");
   let currentOrganizations = organizations;
+  let currentPage = 1;
   let selectedCsvFile = null;
+
+  function updateOrganizationRows() {
+    const page = paginateItems(currentOrganizations, currentPage);
+    currentPage = page.page;
+    container.querySelector("[data-organization-table-body]").innerHTML = renderOrganizationRows(page.items);
+    container.querySelector("[data-organization-pagination]").innerHTML = renderPaginationControls(page, "organizations");
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const payload = organizationPayload(form);
-    if (!payload.division_name || !payload.division_head_name || !payload.division_head_id || !payload.part_name || !payload.part_head_name || !payload.part_head_id) {
+    if (!payload.division_name || !payload.part_name || !payload.part_head_name || !payload.part_head_id) {
       container.querySelector("[data-organization-error]").textContent = "필수 조직 정보를 입력하세요.";
       return;
     }
@@ -286,10 +296,11 @@ export async function renderOrganizationManager(container) {
   container.querySelector("[data-action='search-organizations']").addEventListener("click", async () => {
     const search = container.querySelector("[name='organization_search']").value.trim();
     currentOrganizations = await fetchJson(`/api/organizations${search ? `?part=${encodeURIComponent(search)}` : ""}`);
-    container.querySelector(".compact-table tbody").innerHTML = renderOrganizationRows(currentOrganizations);
+    currentPage = 1;
+    updateOrganizationRows();
   });
 
-  container.querySelector("tbody").addEventListener("click", async (event) => {
+  container.querySelector("[data-organization-table-body]").addEventListener("click", async (event) => {
     const row = event.target.closest("[data-organization-id]");
     if (!row) {
       return;
@@ -302,6 +313,15 @@ export async function renderOrganizationManager(container) {
       await fetchJson(`/api/admin/organizations/${org.id}`, { method: "DELETE" });
       await renderOrganizationManager(container);
     }
+  });
+
+  container.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page-action]");
+    if (!button || !button.closest("[data-pagination-target='organizations']")) {
+      return;
+    }
+    currentPage += button.dataset.pageAction === "next" ? 1 : -1;
+    updateOrganizationRows();
   });
 
   container.querySelector("[name='organization_csv']").addEventListener("change", async (event) => {
@@ -342,4 +362,6 @@ export async function renderOrganizationManager(container) {
     }
     await renderOrganizationManager(container);
   });
+
+  updateOrganizationRows();
 }

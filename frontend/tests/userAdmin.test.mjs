@@ -35,4 +35,6 @@ test("user permission manager uses admin user APIs and exposes role controls", (
   assert.match(userAdminSource, /name="role"/);
   assert.match(userAdminSource, /data-action="edit-user"/);
   assert.match(userAdminSource, /data-action="delete-user"/);
+  assert.match(userAdminSource, /paginateItems/);
+  assert.match(userAdminSource, /data-user-pagination/);
 });

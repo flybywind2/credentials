@@ -13,6 +13,9 @@ class Settings:
     sso_token_secret: str = os.getenv("SSO_TOKEN_SECRET", "")
     sso_token_expire_minutes: int = int(os.getenv("SSO_TOKEN_EXPIRE_MINUTES", "480"))
     sso_admin_employee_ids: str = os.getenv("SSO_ADMIN_EMPLOYEE_IDS", "admin001")
+    sso_broker_employee_header: str = os.getenv("SSO_BROKER_EMPLOYEE_HEADER", "X-Broker-Employee-Id")
+    sso_broker_name_header: str = os.getenv("SSO_BROKER_NAME_HEADER", "")
+    sso_broker_email_header: str = os.getenv("SSO_BROKER_EMAIL_HEADER", "")
     sso_ldap_bind_dn_template: str = os.getenv("SSO_LDAP_BIND_DN_TEMPLATE", "{employee_id}")
     sso_ldap_search_base: str = os.getenv("SSO_LDAP_SEARCH_BASE", "")
     sso_ldap_search_filter: str = os.getenv(
@@ -34,10 +37,6 @@ class Settings:
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     mail_api_base_url: str = os.getenv("MAIL_API_BASE_URL", "mail.net")
     mail_api_system_id: str = os.getenv("MAIL_API_SYSTEM_ID", "")
-    mail_api_doc_secu_type: str = os.getenv("MAIL_API_DOC_SECU_TYPE", "PERSONAL")
-    mail_api_content_type: str = os.getenv("MAIL_API_CONTENT_TYPE", "HTML")
-    mail_api_payload_format: str = os.getenv("MAIL_API_PAYLOAD_FORMAT", "json")
-    mail_api_recipient_type: str = os.getenv("MAIL_API_RECIPIENT_TYPE", "TO")
     mail_api_timeout_seconds: float = float(os.getenv("MAIL_API_TIMEOUT_SECONDS", "10"))
 
 

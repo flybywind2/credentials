@@ -51,6 +51,10 @@ export function validateTaskReviewPayload(tasks, reviews, action) {
   return { valid: true, message: "" };
 }
 
+export function reviewCompletionAction(reviews) {
+  return reviews.some((review) => review.decision === "REJECTED") ? "reject" : "approve";
+}
+
 function renderReviewControls(task) {
   return `
     <div class="review-choice-group" role="radiogroup" aria-label="${escapeHtml(task.major_task)} 검토 결과">
@@ -231,11 +235,21 @@ async function approveApproval(approvalId, container, context = {}) {
   await renderApprovalList(container, context);
 }
 
-async function approveReviewedApproval(approvalId, container, tasks, context = {}) {
+async function completeReviewedApproval(approvalId, container, tasks, context = {}) {
   const taskReviews = collectTaskReviews(container);
-  const validation = validateTaskReviewPayload(tasks, taskReviews, "approve");
+  const action = reviewCompletionAction(taskReviews);
+  const validation = validateTaskReviewPayload(tasks, taskReviews, action);
   if (!validation.valid) {
     renderReviewError(container, validation.message);
+    return;
+  }
+  if (action === "reject") {
+    openRejectModal(
+      approvalId,
+      () => renderApprovalList(container, context),
+      taskReviews,
+      rejectReasonFromReviews(tasks, taskReviews),
+    );
     return;
   }
   await fetchJson(`/api/approvals/${approvalId}/approve`, {
@@ -243,21 +257,6 @@ async function approveReviewedApproval(approvalId, container, tasks, context = {
     body: JSON.stringify({ task_reviews: taskReviews }),
   });
   await renderApprovalList(container, context);
-}
-
-async function rejectReviewedApproval(approvalId, container, tasks, context = {}) {
-  const taskReviews = collectTaskReviews(container);
-  const validation = validateTaskReviewPayload(tasks, taskReviews, "reject");
-  if (!validation.valid) {
-    renderReviewError(container, validation.message);
-    return;
-  }
-  openRejectModal(
-    approvalId,
-    () => renderApprovalList(container, context),
-    taskReviews,
-    rejectReasonFromReviews(tasks, taskReviews),
-  );
 }
 
 async function renderApprovalDetail(container, approvalId, context = {}) {
@@ -273,8 +272,7 @@ async function renderApprovalDetail(container, approvalId, context = {}) {
           <p>${escapeHtml(approval.requester || "-")} · ${tasks.length}건 · ${approval.status} · ${formatRequestedAt(approval.requested_at)}</p>
         </div>
         <div class="approval-actions">
-          <button type="button" class="secondary-button" data-action="reject-detail">검토 반려</button>
-          <button type="button" class="primary-button" data-action="approve-detail">검토 승인</button>
+          <button type="button" class="primary-button" data-action="complete-detail">검토 완료</button>
         </div>
       </div>
       <div class="approval-detail">
@@ -306,11 +304,8 @@ async function renderApprovalDetail(container, approvalId, context = {}) {
   container.querySelector("[data-action='back-to-approvals']").addEventListener("click", () => {
     renderApprovalList(container, context);
   });
-  container.querySelector("[data-action='approve-detail']").addEventListener("click", () => {
-    approveReviewedApproval(approvalId, container, tasks, context);
-  });
-  container.querySelector("[data-action='reject-detail']").addEventListener("click", () => {
-    rejectReviewedApproval(approvalId, container, tasks, context);
+  container.querySelector("[data-action='complete-detail']").addEventListener("click", () => {
+    completeReviewedApproval(approvalId, container, tasks, context);
   });
   container.querySelectorAll("tbody tr[data-task-id]").forEach((row) => {
     row.addEventListener("click", (event) => {

@@ -35,4 +35,6 @@ test("dashboard source renders integrated ratio, donut chart, and summary contro
   assert.match(dashboardSource, /approval-donut/);
   assert.match(dashboardSource, /data-summary-filter/);
   assert.match(dashboardSource, /data-summary-sort/);
+  assert.match(dashboardSource, /data-admin-toggle/);
+  assert.match(dashboardSource, /data-department-pagination/);
 });

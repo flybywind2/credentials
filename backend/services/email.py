@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 import html
-import json
 import logging
 from email.message import EmailMessage as SmtpMessage
 from typing import Protocol
@@ -65,7 +64,7 @@ class MailApiEmailService:
         payload = self._payload(message)
         response = httpx.post(
             self._url(),
-            **self._request_body(payload),
+            json=payload,
             headers=self._headers(),
             timeout=settings.mail_api_timeout_seconds,
         )
@@ -81,36 +80,17 @@ class MailApiEmailService:
         return f"{base_url}/send_mail"
 
     def _payload(self, message: EmailMessage) -> dict:
-        content_type = settings.mail_api_content_type or ("HTML" if message.html_body else "TEXT")
-        contents = message.html_body if content_type.upper() == "HTML" and message.html_body else message.body
+        content = message.html_body if message.html_body else message.body
         return {
-            "subject": message.subject,
-            "contents": contents,
-            "contentType": content_type,
-            "docSecuType": settings.mail_api_doc_secu_type,
-            "recipients": [
-                {
-                    "emailAddress": recipient,
-                    "recipientType": settings.mail_api_recipient_type,
-                }
-                for recipient in message.recipients
-            ],
+            "recipients": message.recipients,
+            "title": message.subject,
+            "content": content,
         }
 
     def _headers(self) -> dict:
         if settings.mail_api_system_id:
             return {"System-ID": settings.mail_api_system_id}
         return {}
-
-    def _request_body(self, payload: dict) -> dict:
-        if settings.mail_api_payload_format.lower() == "form":
-            return {
-                "data": {
-                    key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
-                    for key, value in payload.items()
-                }
-            }
-        return {"json": payload}
 
 
 def get_email_service() -> EmailService:

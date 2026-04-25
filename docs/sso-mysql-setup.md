@@ -8,10 +8,11 @@
 
 - DB 연결은 `DATABASE_URL`로 전환 가능하며, 기본값은 `sqlite:///./dev.db`이다.
 - MySQL 드라이버는 `PyMySQL`을 사용한다.
-- SSO 설정 모드는 `mock`, `ldap`, `saml`을 지원한다.
+- SSO 설정 모드는 `mock`, `broker`, `ldap`, `saml`을 지원한다.
+- Broker 모드는 사내 SSO broker/reverse proxy가 주입하는 내부 사용자 헤더를 신뢰한다.
 - LDAP 모드는 `ldap3`로 AD/LDAP bind와 선택적 사용자 조회를 수행한다.
 - SAML 모드는 `python3-saml`로 ACS endpoint(`/api/auth/saml/acs`)에서 assertion 서명, audience, issuer, 만료를 검증한다.
-- 인증 성공 후 백엔드는 HMAC 서명 bearer token을 발급하고, `/api/auth/me`와 업무 API는 `Authorization: Bearer ...`를 우선 신뢰한다.
+- LDAP/SAML 인증 성공 후 백엔드는 HMAC 서명 bearer token을 발급하고, broker 모드에서는 broker 내부 헤더를 신뢰한다.
 - `X-Employee-Id` 헤더 fallback은 `SSO_MODE=mock` 개발 모드에서만 동작한다.
 
 ## 환경 변수
@@ -38,9 +39,6 @@ APP_BASE_URL=https://credential.example.internal
 SMTP_MODE=mail_api
 MAIL_API_BASE_URL=mail.net
 MAIL_API_SYSTEM_ID=credential-system
-MAIL_API_DOC_SECU_TYPE=PERSONAL
-MAIL_API_CONTENT_TYPE=HTML
-MAIL_API_PAYLOAD_FORMAT=json
 ```
 
 SAML을 사용할 경우:
@@ -56,6 +54,18 @@ SSO_SAML_SSO_URL=https://idp.example.internal/sso
 SSO_SAML_X509_CERT=paste-idp-signing-certificate
 SSO_SAML_EMPLOYEE_ATTR=employee_id
 ```
+
+SSO broker를 사용할 경우:
+
+```env
+SSO_MODE=broker
+SSO_BROKER_EMPLOYEE_HEADER=X-Broker-Employee-Id
+SSO_BROKER_NAME_HEADER=X-Broker-Display-Name
+SSO_BROKER_EMAIL_HEADER=X-Broker-Email
+APP_BASE_URL=https://credential.example.internal
+```
+
+Broker/proxy는 외부 클라이언트가 보낸 `X-Broker-*` 헤더를 제거한 뒤, 인증된 사용자에 대해서만 내부 헤더를 다시 주입해야 한다.
 
 ## MySQL 준비
 
@@ -138,10 +148,17 @@ SAML 방식:
 - assertion의 `SSO_SAML_EMPLOYEE_ATTR` 또는 NameID에서 사번을 추출한다.
 - IdP 인증서 교체 시 `SSO_SAML_X509_CERT`를 함께 갱신한다.
 
+Broker 방식:
+
+- `SSO_MODE=broker`에서는 `/api/auth/me`와 업무 API가 `SSO_BROKER_EMPLOYEE_HEADER`에 지정된 내부 헤더에서 사번을 읽는다.
+- 기본 헤더는 `X-Broker-Employee-Id`이며, 표시명과 메일은 선택적으로 `SSO_BROKER_NAME_HEADER`, `SSO_BROKER_EMAIL_HEADER`에서 읽는다.
+- 개발용 `X-Employee-Id` fallback은 broker 모드에서 무시된다.
+- Reverse proxy나 broker 계층에서 외부 요청의 동일 헤더를 반드시 삭제하고 인증 후 재주입한다.
+
 공통:
 
 - 인증된 사번은 `organizations`의 파트장/그룹장/팀장/실장 ID 또는 `users` 테이블, `SSO_ADMIN_EMPLOYEE_IDS`와 매핑된다.
-- 운영에서 `mock-token-*`은 사용하지 않으며 모든 API는 bearer token을 우선 사용한다.
+- 운영에서 `mock-token-*`은 사용하지 않는다. LDAP/SAML은 bearer token을 사용하고, broker 모드는 broker 내부 헤더를 사용한다.
 - reverse proxy가 `X-Employee-Id`를 주입하는 구조라도 운영 모드에서는 앱이 이 헤더를 fallback 인증으로 쓰지 않는다.
 
 ## 검증
@@ -187,11 +204,12 @@ python -m pytest backend/tests/test_mysql_compatibility.py backend/tests/test_ss
 
 ## 장애 확인 포인트
 
+- `SSO_MODE=broker`이면 `SSO_BROKER_EMPLOYEE_HEADER`가 필요하다.
 - `SSO_MODE=ldap`이면 `SSO_PROVIDER_URL`, `SSO_LDAP_BIND_DN_TEMPLATE`, `SSO_TOKEN_SECRET` 또는 `SSO_CLIENT_SECRET`이 필요하다.
 - `SSO_MODE=saml`이면 ACS URL, SP entity id, IdP entity id, SSO URL, IdP 인증서, token secret이 필요하다.
 - `SMTP_MODE=smtp`이면 `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`가 필요하다.
 - `SMTP_MODE=mail_api`이면 `MAIL_API_BASE_URL`이 필요하다. `MAIL_API_SYSTEM_ID`가 있으면 요청 header `System-ID`로 전달한다.
-- 사내 메일 API는 `POST https://mail.net/send_mail` 형식으로 호출한다. `MAIL_API_BASE_URL=mail.net` 또는 `MAIL_API_BASE_URL=https://mail.net/send_mail` 모두 지원한다. 기본 payload는 JSON이며, gateway가 form parameter를 요구하면 `MAIL_API_PAYLOAD_FORMAT=form`으로 변경한다.
+- 사내 메일 라우터는 `POST https://mail.net/send_mail` 형식으로 호출한다. `MAIL_API_BASE_URL=mail.net` 또는 `MAIL_API_BASE_URL=https://mail.net/send_mail` 모두 지원한다. 앱은 JSON payload `{recipients, title, content}`만 전달하고, `docSecuType`, `contentType`, `recipientType` 조립은 메일 라우터가 담당한다.
 - 값이 없으면 앱 시작 시 `Missing required environment variables` 오류로 중단된다.
 - 지원하지 않는 `SSO_MODE`를 쓰면 인증 요청에서 `Unsupported SSO_MODE` 오류가 발생한다.
 - MySQL 접속 실패 시 DNS, 방화벽, 계정 host, TLS 옵션, URL 인코딩된 비밀번호를 우선 확인한다.

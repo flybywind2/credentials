@@ -1,12 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException
+from fastapi import APIRouter, Depends, Form, Header, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.config import settings
 from backend.database import get_db
-from backend.services.auth_tokens import create_access_token, verify_access_token
+from backend.services.auth_tokens import create_access_token
+from backend.services.current_user import resolve_current_user_from_request
 from backend.services.sso import get_sso_adapter
 from backend.services.user_mapping import resolve_app_user
 
@@ -16,19 +16,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class LoginRequest(BaseModel):
     employee_id: str
     password: str | None = None
-
-
-def _user_from_token_payload(payload: dict) -> dict:
-    return {key: value for key, value in payload.items() if key not in {"iat", "exp"}}
-
-
-def _bearer_token(authorization: str | None) -> str | None:
-    if not authorization:
-        return None
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        return None
-    return token
 
 
 @router.post("/login")
@@ -69,12 +56,13 @@ def saml_acs(
 @router.get("/me")
 def read_current_user(
     db: Annotated[Session, Depends(get_db)],
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
     x_employee_id: Annotated[str | None, Header()] = None,
 ):
-    token = _bearer_token(authorization)
-    if token:
-        return _user_from_token_payload(verify_access_token(token))
-    if settings.sso_mode.lower() == "mock":
-        return resolve_app_user(x_employee_id or "admin001", db=db, provider="mock")
-    raise HTTPException(status_code=401, detail="Authentication required")
+    return resolve_current_user_from_request(
+        db=db,
+        request=request,
+        authorization=authorization,
+        x_employee_id=x_employee_id,
+    )

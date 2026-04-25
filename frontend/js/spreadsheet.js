@@ -1,8 +1,8 @@
 import { currentEmployeeId, fetchJson } from "./api.js";
-import { parseTsvToTasks } from "./clipboard.js";
+import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
-import { openTaskModal } from "./form.js?v=20260422-save-delete-errors";
+import { openTaskModal } from "./form.js?v=20260425-form-comments";
 import { tooltipMap } from "./tooltipAdmin.js?v=20260421-p1b";
 
 function badge(label, tone) {
@@ -51,13 +51,72 @@ function orgIdOf(user) {
 }
 
 function orgPathOf(user) {
-  const organization = user?.organization || {};
+  return orgPathOfOrganization(user?.organization);
+}
+
+function orgPathOfOrganization(organization = {}) {
   return [
     organization.division_name,
     organization.team_name,
     organization.group_name,
     organization.part_name,
   ].filter(Boolean).join(" / ") || "조직 정보 없음";
+}
+
+function isApproverForOrganization(user, organization) {
+  const employeeId = user?.employee_id;
+  return Boolean(employeeId && organization && [
+    organization.group_head_id,
+    organization.team_head_id,
+    organization.division_head_id,
+    organization.part_head_id,
+  ].includes(employeeId));
+}
+
+export function editableOrganizationsForUser(user, organizations = []) {
+  const currentOrgId = orgIdOf(user);
+  const source = Array.isArray(organizations) ? organizations : [];
+  if (user?.role === "ADMIN") {
+    return source.length ? source : [user.organization].filter(Boolean);
+  }
+  if (user?.role === "APPROVER") {
+    const editable = source.filter((organization) => (
+      Number(organization.id) === currentOrgId || isApproverForOrganization(user, organization)
+    ));
+    return editable.length ? editable : [user.organization].filter(Boolean);
+  }
+  const currentOrganization = source.find((organization) => Number(organization.id) === currentOrgId);
+  return [currentOrganization || user?.organization].filter(Boolean);
+}
+
+export function selectedEditableOrganization(user, organizations = [], selectedOrgId = null) {
+  const editable = editableOrganizationsForUser(user, organizations);
+  const selectedId = Number(selectedOrgId);
+  const currentOrgId = orgIdOf(user);
+  return (
+    editable.find((organization) => Number(organization.id) === selectedId)
+    || editable.find((organization) => Number(organization.id) === currentOrgId)
+    || editable[0]
+    || user?.organization
+    || { id: currentOrgId }
+  );
+}
+
+function renderOrganizationSelector(organizations, selectedOrganization) {
+  if (organizations.length <= 1) {
+    return "";
+  }
+  return `
+    <label class="work-org-selector">하위파트
+      <select data-action="select-work-org" aria-label="하위파트 선택">
+        ${organizations.map((organization) => `
+          <option value="${organization.id}" ${Number(organization.id) === Number(selectedOrganization.id) ? "selected" : ""}>
+            ${escapeHtml(orgPathOfOrganization(organization))}
+          </option>
+        `).join("")}
+      </select>
+    </label>
+  `;
 }
 
 function classificationSummary(rows) {
@@ -79,6 +138,11 @@ function classificationSummary(rows) {
     compliance: 0,
     integrated: 0,
   });
+}
+
+function assigneeSummary(task) {
+  const names = (task.assignees || []).map((assignee) => assignee.name || assignee.knox_id).filter(Boolean);
+  return names.length ? names.join(", ") : "-";
 }
 
 function formDataHeaders() {
@@ -194,8 +258,19 @@ function renderPreviewRows(rows, groupedErrors, selectedIndexes = new Set()) {
   `;
 }
 
-function openPastePreviewModal(initialText, questions, organizationId, onSaveRows) {
+function normalizeClipboardPayload(payload = {}) {
+  if (typeof payload === "string") {
+    return { text: payload, html: "" };
+  }
+  return {
+    text: payload.text || "",
+    html: payload.html || "",
+  };
+}
+
+function openPastePreviewModal(initialPayload, questions, organizationId, onSaveRows) {
   closePastePreview();
+  let currentClipboardPayload = normalizeClipboardPayload(initialPayload);
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "paste-preview-modal";
@@ -203,15 +278,29 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
     <section class="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="paste-preview-title">
       <header class="modal-header">
         <div>
-          <h2 id="paste-preview-title">붙여넣기 미리보기</h2>
-          <p>Excel에서 복사한 TSV 데이터를 검증하고 정상 행만 저장합니다.</p>
+          <h2 id="paste-preview-title">Excel 붙여넣기 미리보기</h2>
+          <p>소파트, 대업무, 세부업무만 검증하고 정상 행만 업로드합니다.</p>
         </div>
         <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
       </header>
       <div class="paste-preview-body">
-        <label for="paste-preview-text">TSV 데이터
-          <textarea id="paste-preview-text" name="paste_preview_text" class="preview-textarea">${escapeHtml(initialText)}</textarea>
-        </label>
+        <div class="excel-paste-grid" data-paste-dropzone tabindex="0" role="textbox" aria-label="Excel 붙여넣기 영역">
+          <div class="excel-paste-grid-header">
+            <span>소파트</span>
+            <span>대업무</span>
+            <span>세부업무</span>
+          </div>
+          <div class="excel-paste-grid-row">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="excel-paste-grid-row">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
         <div class="preview-summary" data-preview-summary>
           <span>전체 0행</span>
           <span>정상 0행</span>
@@ -234,8 +323,7 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
   let selectedIndexes = new Set();
 
   async function validatePreview() {
-    const text = overlay.querySelector("#paste-preview-text").value;
-    currentRows = parseTsvToTasks(text, questions, { organizationId });
+    currentRows = parseClipboardToTasks(currentClipboardPayload, questions, { organizationId });
     const result = currentRows.length
       ? await fetchJson("/api/tasks/validate", {
         method: "POST",
@@ -263,17 +351,13 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
     }
     if (event.target.closest("[data-action='preview-save-selected']")) {
       const validRows = selectedPreviewRows(currentRows, currentGroupedErrors, selectedIndexes);
-      for (const row of validRows) {
-        await onSaveRows(row);
-      }
+      await onSaveRows(validRows);
       closePastePreview();
       return;
     }
     if (event.target.closest("[data-action='preview-save-all']")) {
       const validRows = allValidPreviewRows(currentRows, currentGroupedErrors);
-      for (const row of validRows) {
-        await onSaveRows(row);
-      }
+      await onSaveRows(validRows);
       closePastePreview();
     }
   });
@@ -290,13 +374,23 @@ function openPastePreviewModal(initialText, questions, organizationId, onSaveRow
     }
     updatePreviewActions(overlay, currentRows, currentGroupedErrors, selectedIndexes);
   });
+  overlay.querySelector("[data-paste-dropzone]").addEventListener("paste", async (event) => {
+    const html = event.clipboardData?.getData("text/html") || "";
+    const text = event.clipboardData?.getData("text/plain") || "";
+    if (!html && !text) {
+      return;
+    }
+    event.preventDefault();
+    currentClipboardPayload = { html, text };
+    await validatePreview();
+  });
   bindModalAccessibility(overlay, closePastePreview);
 
   document.body.append(overlay);
-  if (initialText.trim()) {
+  if (currentClipboardPayload.html.trim() || currentClipboardPayload.text.trim()) {
     validatePreview();
   } else {
-    overlay.querySelector("#paste-preview-text").focus();
+    overlay.querySelector("[data-paste-dropzone]").focus();
   }
 }
 
@@ -368,7 +462,7 @@ async function openExcelPreviewModal(file, orgId, onSaveRows) {
       <header class="modal-header">
         <div>
           <h2 id="excel-preview-title">Excel Import 미리보기</h2>
-          <p>파일 내용을 먼저 검증하고 정상 행만 저장합니다.</p>
+          <p>소파트, 대업무, 세부업무만 검증하고 정상 행만 업로드합니다.</p>
         </div>
         <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
       </header>
@@ -440,6 +534,7 @@ function renderRows(tasks, groupedErrors = new Map(), currentUser = null, reject
       <td>${badge(task.is_confidential ? "기밀" : "비기밀", task.is_confidential ? "danger" : "neutral")}</td>
       <td>${badge(task.is_national_tech ? "해당" : "비해당", task.is_national_tech ? "danger" : "neutral")}</td>
       <td>${badge(task.is_compliance ? "해당" : "비해당", task.is_compliance ? "warning" : "neutral")}</td>
+      <td>${escapeHtml(assigneeSummary(task))}</td>
       <td>${badge(escapeHtml(task.status), statusTone(task.status))}</td>
       <td class="row-actions">
         ${canDeleteTask(task, currentUser)
@@ -467,6 +562,17 @@ function renderValidationPanel(errors) {
           <li>${error.row_index + 1}행 · ${escapeHtml(error.field)} · ${escapeHtml(error.message)}</li>
         `).join("")}
       </ul>
+    </div>
+  `;
+}
+
+function renderUploadedBlockPanel(count) {
+  return `
+    <div class="validation-panel" role="alert">
+      <div>
+        <strong>분류 저장 필요 ${count}건</strong>
+        <span>Excel Import 또는 붙여넣기로 업로드한 행은 행을 열어 웹에서 분류를 저장한 뒤 승인 요청할 수 있습니다.</span>
+      </div>
     </div>
   `;
 }
@@ -551,18 +657,30 @@ export function canDeleteTask(task, user) {
   return user.role === "ADMIN" || task.created_by_employee_id === user.employee_id;
 }
 
-export async function renderSpreadsheet(container) {
+export async function renderSpreadsheet(container, options = {}) {
   const currentUser = await fetchJson("/api/auth/me");
-  const orgId = orgIdOf(currentUser);
-  const [tasks, questions, tooltipRows, deadline, rejection, partStatus] = await Promise.all([
+  const organizations = ["APPROVER", "ADMIN"].includes(currentUser.role)
+    ? await fetchJson("/api/organizations")
+    : [currentUser.organization].filter(Boolean);
+  const editableOrganizations = editableOrganizationsForUser(currentUser, organizations);
+  const selectedOrganization = selectedEditableOrganization(
+    currentUser,
+    organizations,
+    options.selectedOrgId,
+  );
+  const orgId = Number(selectedOrganization.id || orgIdOf(currentUser));
+  const [tasks, questions, tooltipRows, deadline, rejection, partStatus, partMembers] = await Promise.all([
     fetchJson(`/api/tasks?org_id=${orgId}`),
     fetchJson("/api/questions"),
     fetchJson("/api/tooltips"),
     fetchJson("/api/settings/deadline"),
     fetchJson(`/api/tasks/rejection?org_id=${orgId}`),
     fetchJson(`/api/tasks/status?org_id=${orgId}`),
+    fetchJson(`/api/part-members?org_id=${orgId}`),
   ]);
   const tooltips = tooltipMap(tooltipRows);
+  const currentPartName = selectedOrganization.part_name || "";
+  const partMemberCandidates = partMembers.filter((member) => member.part_name === currentPartName);
   let showRejectedOnly = false;
   const rejectedTasks = filterRejectedTasks(tasks, rejection);
   const prioritizedTasks = prioritizeRejectedTasks(tasks, rejection);
@@ -576,16 +694,17 @@ export async function renderSpreadsheet(container) {
       <div class="section-header">
         <div>
           <h2>데이터 입력</h2>
-          <p>${escapeHtml(orgPathOf(currentUser))}</p>
+          <p>${escapeHtml(orgPathOfOrganization(selectedOrganization) || orgPathOf(currentUser))}</p>
         </div>
         <div class="toolbar">
+          ${renderOrganizationSelector(editableOrganizations, selectedOrganization)}
           <button type="button" class="secondary-button" data-action="add-row">행 추가</button>
           <button type="button" class="secondary-button" data-action="save-all">전체 저장</button>
           <button type="button" class="secondary-button" data-action="download-template">양식</button>
           <label class="secondary-button file-button" for="task-excel-import">Excel Import
             <input id="task-excel-import" type="file" accept=".xlsx" data-action="excel-import">
           </label>
-          <button type="button" class="secondary-button" data-action="paste-preview">붙여넣기</button>
+        <button type="button" class="secondary-button" data-action="paste-preview">Excel 붙여넣기</button>
           <button type="button" class="primary-button" data-action="submit-approval">승인 요청</button>
         </div>
       </div>
@@ -601,6 +720,7 @@ export async function renderSpreadsheet(container) {
         <span>국가핵심기술 문항 ${questions.national_tech.length}개</span>
         <span>${formatDday(deadline)}</span>
         <span>전체 ${partStatus.total_tasks}건</span>
+        <span>UPLOADED ${partStatus.status_counts.UPLOADED || 0}건</span>
         <span>DRAFT ${partStatus.status_counts.DRAFT}건</span>
         ${hasRejectedTaskReviews(rejection) ? `
           <button type="button" class="secondary-button compact-filter-button" data-action="toggle-rejected-only" aria-pressed="false">
@@ -621,6 +741,7 @@ export async function renderSpreadsheet(container) {
               <th>${headerWithTooltip("기밀", "confidential", tooltips)}</th>
               <th>${headerWithTooltip("국가핵심기술", "national_tech", tooltips)}</th>
               <th>${headerWithTooltip("Compliance", "compliance", tooltips)}</th>
+              <th>담당자</th>
               <th>상태</th>
               <th>작업</th>
             </tr>
@@ -647,7 +768,7 @@ export async function renderSpreadsheet(container) {
         }),
       });
     }
-    await renderSpreadsheet(container);
+    await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
     return savedTask;
   }
 
@@ -664,25 +785,32 @@ export async function renderSpreadsheet(container) {
     }
   }
 
-  async function savePastedRow(row) {
-    await fetchJson("/api/tasks", {
+  async function saveImportedRows(rows) {
+    if (!rows.length) {
+      return;
+    }
+    await fetchJson("/api/tasks/bulk", {
       method: "POST",
-      body: JSON.stringify({
+      body: JSON.stringify(rows.map((row) => ({
         organization_id: orgId,
         ...row,
-      }),
+      }))),
     });
   }
 
-  function openClipboardPreview(text = "") {
-    openPastePreviewModal(text, questions, orgId, async (row) => {
-      await savePastedRow(row);
-      await renderSpreadsheet(container);
+  function openClipboardPreview(payload = {}) {
+    openPastePreviewModal(payload, questions, orgId, async (rows) => {
+      await saveImportedRows(rows);
+      await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
     });
   }
 
   container.querySelector("[data-action='add-row']").addEventListener("click", () => {
-    openTaskModal({}, saveTask, questions);
+    openTaskModal({}, saveTask, questions, { partMembers: partMemberCandidates });
+  });
+
+  container.querySelector("[data-action='select-work-org']")?.addEventListener("change", async (event) => {
+    await renderSpreadsheet(container, { ...options, selectedOrgId: Number(event.target.value) });
   });
 
   container.querySelector("[data-action='paste-preview']").addEventListener("click", () => {
@@ -722,10 +850,8 @@ export async function renderSpreadsheet(container) {
     }
     try {
       await openExcelPreviewModal(file, orgId, async (validRows) => {
-        for (const row of validRows) {
-          await savePastedRow(row);
-        }
-        await renderSpreadsheet(container);
+        await saveImportedRows(validRows);
+        await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
       });
     } catch (error) {
       container.querySelector("[data-validation-panel]").innerHTML = `
@@ -736,6 +862,11 @@ export async function renderSpreadsheet(container) {
   });
 
   container.querySelector("[data-action='submit-approval']").addEventListener("click", async () => {
+    const uploadedCount = tasks.filter((task) => task.status === "UPLOADED").length;
+    if (uploadedCount) {
+      container.querySelector("[data-validation-panel]").innerHTML = renderUploadedBlockPanel(uploadedCount);
+      return;
+    }
     const result = await fetchJson("/api/tasks/validate", {
       method: "POST",
       body: JSON.stringify({ rows: tasks.map((task) => ({ ...task, organization_id: orgId })) }),
@@ -753,17 +884,18 @@ export async function renderSpreadsheet(container) {
     }
     openApprovalConfirmModal(tasks, async () => {
       await fetchJson(`/api/approvals/submit?org_id=${orgId}`, { method: "POST" });
-      await renderSpreadsheet(container);
+      await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
     });
   });
 
   container.addEventListener("paste", (event) => {
+    const html = event.clipboardData?.getData("text/html") || "";
     const text = event.clipboardData?.getData("text/plain") || "";
-    if (!text.includes("\t")) {
+    if (!html.includes("<table") && !text.includes("\t")) {
       return;
     }
     event.preventDefault();
-    openClipboardPreview(text);
+    openClipboardPreview({ html, text });
   });
 
   container.querySelector("[data-task-table-body]").addEventListener("click", async (event) => {
@@ -777,7 +909,7 @@ export async function renderSpreadsheet(container) {
       }
       try {
         await fetchJson(`/api/tasks/${deleteButton.dataset.deleteTask}`, { method: "DELETE" });
-        await renderSpreadsheet(container);
+        await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
       } catch (deleteError) {
         container.querySelector("[data-validation-panel]").innerHTML = renderActionError("삭제 실패", deleteError.message);
       }
@@ -786,7 +918,7 @@ export async function renderSpreadsheet(container) {
     const row = event.target.closest("tr[data-task-id]");
     if (row) {
       const task = tasks.find((item) => String(item.id) === row.dataset.taskId);
-      openTaskModal(task, saveTask, questions);
+      openTaskModal(task, saveTask, questions, { partMembers: partMemberCandidates });
     }
   });
 }

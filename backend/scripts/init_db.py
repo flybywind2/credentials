@@ -11,7 +11,9 @@ from backend.models import (
     ConfidentialQuestion,
     NationalTechQuestion,
     Organization,
+    PartMember,
     SystemSetting,
+    TaskAssignee,
     TaskEntry,
     User,
 )
@@ -36,6 +38,7 @@ def initialize_database(database_url: str = "sqlite:///./dev.db", reset: bool = 
         Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     _ensure_incremental_columns(engine)
+    _ensure_uploaded_status_constraint(engine)
 
     session = sessionmaker(bind=engine)()
     try:
@@ -119,6 +122,49 @@ def _ensure_incremental_columns(engine) -> None:
     if "description" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE system_settings ADD COLUMN description TEXT"))
+
+
+def _ensure_uploaded_status_constraint(engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    inspector = inspect(engine)
+    if "task_entries" not in inspector.get_table_names():
+        return
+    with engine.begin() as connection:
+        create_sql = connection.execute(
+            text("SELECT sql FROM sqlite_master WHERE type='table' AND name='task_entries'")
+        ).scalar_one_or_none()
+        if not create_sql or "UPLOADED" in create_sql:
+            return
+
+        old_table = "task_entries_old_status_migration"
+        connection.execute(text("PRAGMA foreign_keys=OFF"))
+        connection.execute(text(f"ALTER TABLE task_entries RENAME TO {old_table}"))
+        for index_name in connection.execute(
+            text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=:table_name AND sql IS NOT NULL"),
+            {"table_name": old_table},
+        ).scalars():
+            connection.execute(text(f"DROP INDEX {index_name}"))
+        TaskEntry.__table__.create(bind=connection)
+        old_columns = {
+            row[1]
+            for row in connection.execute(text(f"PRAGMA table_info({old_table})")).all()
+        }
+        new_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(task_entries)")).all()
+        }
+        shared_columns = [
+            column.name
+            for column in TaskEntry.__table__.columns
+            if column.name in old_columns and column.name in new_columns
+        ]
+        column_list = ", ".join(shared_columns)
+        connection.execute(
+            text(f"INSERT INTO task_entries ({column_list}) SELECT {column_list} FROM {old_table}")
+        )
+        connection.execute(text(f"DROP TABLE {old_table}"))
+        connection.execute(text("PRAGMA foreign_keys=ON"))
 
 
 def main() -> None:

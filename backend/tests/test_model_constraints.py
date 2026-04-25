@@ -70,6 +70,33 @@ def test_task_rejects_unknown_status(db_session):
         db_session.commit()
 
 
+def test_task_accepts_uploaded_status(db_session):
+    org = Organization(
+        division_name="실",
+        division_head_name="실장",
+        division_head_id="d1",
+        part_name="파트",
+        part_head_name="파트장",
+        part_head_id="p1",
+        org_type="NORMAL",
+    )
+    user = User(employee_id="u1", name="사용자", role="INPUTTER")
+    db_session.add_all([org, user])
+    db_session.flush()
+
+    db_session.add(
+        TaskEntry(
+            organization_id=org.id,
+            created_by=user.id,
+            major_task="대업무",
+            detail_task="세부업무",
+            status="UPLOADED",
+        )
+    )
+
+    db_session.commit()
+
+
 def test_approval_request_rejects_invalid_step_count(db_session):
     org = Organization(
         division_name="실",

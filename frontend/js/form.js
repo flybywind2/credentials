@@ -28,8 +28,16 @@ function answerMap(task, key) {
   return map;
 }
 
+export function isQuestionOptionSelected(selectedOptions, option) {
+  const options = Array.isArray(selectedOptions) ? selectedOptions : [];
+  if (!options.length) {
+    return option === NONE_OPTION;
+  }
+  return options.includes(option);
+}
+
 function isOptionSelected(map, questionId, option) {
-  return (map.get(String(questionId)) || []).includes(option);
+  return isQuestionOptionSelected(map.get(String(questionId)), option);
 }
 
 function renderOwnerRadios(name, selectedValue) {
@@ -171,6 +179,45 @@ export function selectNoneOptionsForSection(form, type) {
 
 function hasValue(value) {
   return String(value ?? "").trim() !== "";
+}
+
+function selectedAssigneeIds(task) {
+  return new Set((task.assignees || []).map((assignee) => assignee.knox_id));
+}
+
+function renderAssigneeSection(task, partMembers = []) {
+  const selected = selectedAssigneeIds(task);
+  const selectedCount = selected.size;
+  return `
+    <section class="form-section" data-assignee-section>
+      <header class="form-section-header">
+        <h3>담당자 배정</h3>
+        <span class="badge neutral">${selectedCount}명 선택</span>
+      </header>
+      ${partMembers.length ? `
+        <details class="assignee-dropdown">
+          <summary>담당자 선택</summary>
+          <div class="checkbox-grid assignee-choice-list">
+            ${partMembers.map((member, index) => {
+              const inputId = `modal-assignee-${index}`;
+              return `
+                <label class="choice-chip" for="${inputId}">
+                  <input
+                    id="${inputId}"
+                    name="assignee_knox_ids"
+                    type="checkbox"
+                    value="${escapeHtml(member.knox_id)}"
+                    ${selected.has(member.knox_id) ? "checked" : ""}
+                  >
+                  <span>${escapeHtml(member.name)} / ${escapeHtml(member.knox_id)}</span>
+                </label>
+              `;
+            }).join("")}
+          </div>
+        </details>
+      ` : `<p class="empty-note">파트별 인력현황 CSV를 업로드하면 동일 파트명 인력이 표시됩니다.</p>`}
+    </section>
+  `;
 }
 
 export function classificationRequiredFieldErrors({ isConfidential, isNationalTech, isCompliance, values }) {
@@ -318,13 +365,21 @@ function validateForm(form) {
     storage_location: form.elements.storage_location.value.trim(),
     related_menu: form.elements.related_menu.value.trim(),
     share_scope: form.elements.share_scope.value,
+    assignee_knox_ids: [...form.querySelectorAll("input[name='assignee_knox_ids']:checked")]
+      .map((input) => input.value),
   };
 }
 
-export function openTaskModal(task = {}, onSave, questions = { confidential: [], national_tech: [] }) {
+export function openTaskModal(
+  task = {},
+  onSave,
+  questions = { confidential: [], national_tech: [] },
+  options = {},
+) {
   closeTaskModal();
   const isNew = !task.id;
   let currentTask = { ...task };
+  const partMembers = options.partMembers || [];
   const confidentialAnswers = answerMap(task, "confidential_answers");
   const nationalTechAnswers = answerMap(task, "national_tech_answers");
 
@@ -348,6 +403,7 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
           <div class="detail-grid">
             <label for="modal-sub-part">소파트
               <input id="modal-sub-part" name="sub_part" value="${escapeHtml(valueOf(task, "sub_part"))}">
+              <span class="field-error" data-error-for="sub_part"></span>
             </label>
             <label for="modal-major-task">대업무
               <input id="modal-major-task" name="major_task" value="${escapeHtml(valueOf(task, "major_task"))}">
@@ -359,6 +415,7 @@ export function openTaskModal(task = {}, onSave, questions = { confidential: [],
             </label>
           </div>
         </section>
+        ${renderAssigneeSection(task, partMembers)}
         ${renderClassificationSection({
           type: "confidential",
           title: "기밀 여부",

@@ -1,6 +1,32 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from backend.main import app
+
+
+def _create_test_org(client: TestClient, label: str, group_head_id: str, part_head_id: str) -> int:
+    response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": f"{label}실",
+            "division_head_name": f"{label}실장",
+            "division_head_id": f"{part_head_id}-div",
+            "team_name": f"{label}팀",
+            "team_head_name": f"{label}팀장",
+            "team_head_id": f"{part_head_id}-team",
+            "group_name": f"{label}그룹",
+            "group_head_name": f"{label}그룹장",
+            "group_head_id": group_head_id,
+            "part_name": f"{label}파트",
+            "part_head_name": f"{label}파트장",
+            "part_head_id": part_head_id,
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
 
 
 def test_inputter_can_create_update_and_delete_own_org_task():
@@ -37,6 +63,333 @@ def test_inputter_can_create_update_and_delete_own_org_task():
         headers={"X-Employee-Id": "part001"},
     )
     assert delete_response.status_code == 204
+
+
+def test_group_head_part_head_dual_role_can_create_own_part_task():
+    client = TestClient(app)
+    employee_id = f"dual{uuid4().hex[:8]}"
+    org_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "겸임입력실",
+            "division_head_name": "겸임입력실장",
+            "division_head_id": f"{employee_id}-div",
+            "team_name": "겸임입력팀",
+            "team_head_name": "겸임입력팀장",
+            "team_head_id": f"{employee_id}-team",
+            "group_name": "겸임입력그룹",
+            "group_head_name": "겸임입력그룹장",
+            "group_head_id": employee_id,
+            "part_name": "겸임입력파트",
+            "part_head_name": "겸임입력파트장",
+            "part_head_id": employee_id,
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert org_response.status_code == 201
+    org_id = org_response.json()["id"]
+    created_task_id = None
+
+    try:
+        me_response = client.get("/api/auth/me", headers={"X-Employee-Id": employee_id})
+        assert me_response.status_code == 200
+        assert me_response.json()["role"] == "APPROVER"
+
+        response = client.post(
+            "/api/tasks",
+            json={
+                "organization_id": org_id,
+                "sub_part": "겸임",
+                "major_task": "겸임자가 입력한 대업무",
+                "detail_task": "그룹장 겸 파트장 입력 권한 검증",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+            headers={"X-Employee-Id": employee_id},
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        created_task_id = body["id"]
+        assert body["created_by_employee_id"] == employee_id
+    finally:
+        if created_task_id is not None:
+            client.delete(
+                f"/api/tasks/{created_task_id}",
+                headers={"X-Employee-Id": employee_id},
+            )
+        client.delete(
+            f"/api/admin/organizations/{org_id}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+
+def test_group_head_can_update_subordinate_part_task():
+    client = TestClient(app)
+    group_head_id = f"grp{uuid4().hex[:8]}"
+    part_head_id = f"part{uuid4().hex[:8]}"
+    org_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "하위수정실",
+            "division_head_name": "하위수정실장",
+            "division_head_id": f"{group_head_id}-div",
+            "team_name": "하위수정팀",
+            "team_head_name": "하위수정팀장",
+            "team_head_id": f"{group_head_id}-team",
+            "group_name": "하위수정그룹",
+            "group_head_name": "하위수정그룹장",
+            "group_head_id": group_head_id,
+            "part_name": "하위수정파트",
+            "part_head_name": "하위수정파트장",
+            "part_head_id": part_head_id,
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert org_response.status_code == 201
+    org_id = org_response.json()["id"]
+    task_id = None
+
+    try:
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "organization_id": org_id,
+                "sub_part": "하위",
+                "major_task": "하위 파트 원본 대업무",
+                "detail_task": "하위 파트 원본 세부업무",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+            headers={"X-Employee-Id": part_head_id},
+        )
+        assert create_response.status_code == 201
+        task_id = create_response.json()["id"]
+
+        update_response = client.put(
+            f"/api/tasks/{task_id}",
+            json={"major_task": "그룹장이 수정한 대업무"},
+            headers={"X-Employee-Id": group_head_id},
+        )
+
+        assert update_response.status_code == 200
+        assert update_response.json()["major_task"] == "그룹장이 수정한 대업무"
+    finally:
+        if task_id is not None:
+            client.delete(f"/api/tasks/{task_id}", headers={"X-Employee-Id": "admin001"})
+        client.delete(
+            f"/api/admin/organizations/{org_id}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+
+def test_group_head_can_validate_subordinate_part_task_rows():
+    client = TestClient(app)
+    group_head_id = f"grp{uuid4().hex[:8]}"
+    part_head_id = f"part{uuid4().hex[:8]}"
+    org_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "하위검증실",
+            "division_head_name": "하위검증실장",
+            "division_head_id": f"{group_head_id}-div",
+            "team_name": "하위검증팀",
+            "team_head_name": "하위검증팀장",
+            "team_head_id": f"{group_head_id}-team",
+            "group_name": "하위검증그룹",
+            "group_head_name": "하위검증그룹장",
+            "group_head_id": group_head_id,
+            "part_name": "하위검증파트",
+            "part_head_name": "하위검증파트장",
+            "part_head_id": part_head_id,
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert org_response.status_code == 201
+    org_id = org_response.json()["id"]
+
+    try:
+        response = client.post(
+            "/api/tasks/validate",
+            json={
+                "rows": [
+                    {
+                        "organization_id": org_id,
+                        "major_task": "하위 파트 검증 대업무",
+                        "detail_task": "하위 파트 검증 세부업무",
+                        "confidential_answers": [["해당 없음"]],
+                        "national_tech_answers": [["해당 없음"]],
+                    }
+                ]
+            },
+            headers={"X-Employee-Id": group_head_id},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["errors"] == []
+    finally:
+        client.delete(
+            f"/api/admin/organizations/{org_id}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+
+def test_group_head_can_update_non_default_subordinate_part_task():
+    client = TestClient(app)
+    group_head_id = f"grp{uuid4().hex[:8]}"
+    base_org_id = _create_test_org(
+        client,
+        "하위기본",
+        group_head_id=group_head_id,
+        part_head_id=f"base{uuid4().hex[:8]}",
+    )
+    target_part_head_id = f"target{uuid4().hex[:8]}"
+    target_org_id = _create_test_org(
+        client,
+        "하위대상",
+        group_head_id=group_head_id,
+        part_head_id=target_part_head_id,
+    )
+    task_id = None
+
+    try:
+        me_response = client.get("/api/auth/me", headers={"X-Employee-Id": group_head_id})
+        assert me_response.status_code == 200
+        assert me_response.json()["organization_id"] == base_org_id
+        assert target_org_id != base_org_id
+
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "organization_id": target_org_id,
+                "sub_part": "하위대상",
+                "major_task": "대상 파트 원본 대업무",
+                "detail_task": "대상 파트 원본 세부업무",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+            headers={"X-Employee-Id": target_part_head_id},
+        )
+        assert create_response.status_code == 201
+        task_id = create_response.json()["id"]
+
+        update_response = client.put(
+            f"/api/tasks/{task_id}",
+            json={"major_task": "그룹장이 선택 파트에서 수정한 대업무"},
+            headers={"X-Employee-Id": group_head_id},
+        )
+
+        assert update_response.status_code == 200
+        assert update_response.json()["major_task"] == "그룹장이 선택 파트에서 수정한 대업무"
+    finally:
+        if task_id is not None:
+            client.delete(f"/api/tasks/{task_id}", headers={"X-Employee-Id": "admin001"})
+        for org_id in (target_org_id, base_org_id):
+            client.delete(
+                f"/api/admin/organizations/{org_id}",
+                headers={"X-Employee-Id": "admin001"},
+            )
+
+
+def test_group_head_can_validate_non_default_subordinate_part_task_rows():
+    client = TestClient(app)
+    group_head_id = f"grp{uuid4().hex[:8]}"
+    base_org_id = _create_test_org(
+        client,
+        "하위검증기본",
+        group_head_id=group_head_id,
+        part_head_id=f"base{uuid4().hex[:8]}",
+    )
+    target_org_id = _create_test_org(
+        client,
+        "하위검증대상",
+        group_head_id=group_head_id,
+        part_head_id=f"target{uuid4().hex[:8]}",
+    )
+
+    try:
+        me_response = client.get("/api/auth/me", headers={"X-Employee-Id": group_head_id})
+        assert me_response.status_code == 200
+        assert me_response.json()["organization_id"] == base_org_id
+        assert target_org_id != base_org_id
+
+        response = client.post(
+            "/api/tasks/validate",
+            json={
+                "rows": [
+                    {
+                        "organization_id": target_org_id,
+                        "major_task": "선택 하위 파트 검증 대업무",
+                        "detail_task": "선택 하위 파트 검증 세부업무",
+                        "confidential_answers": [["해당 없음"]],
+                        "national_tech_answers": [["해당 없음"]],
+                    }
+                ]
+            },
+            headers={"X-Employee-Id": group_head_id},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["errors"] == []
+    finally:
+        for org_id in (target_org_id, base_org_id):
+            client.delete(
+                f"/api/admin/organizations/{org_id}",
+                headers={"X-Employee-Id": "admin001"},
+            )
+
+
+def test_approver_can_create_non_default_part_head_org_task():
+    client = TestClient(app)
+    employee_id = f"dual{uuid4().hex[:8]}"
+    base_org_id = _create_test_org(
+        client,
+        "겸임기본",
+        group_head_id=employee_id,
+        part_head_id=employee_id,
+    )
+    target_org_id = _create_test_org(
+        client,
+        "겸임추가",
+        group_head_id=f"other{uuid4().hex[:8]}",
+        part_head_id=employee_id,
+    )
+    task_id = None
+
+    try:
+        me_response = client.get("/api/auth/me", headers={"X-Employee-Id": employee_id})
+        assert me_response.status_code == 200
+        assert me_response.json()["role"] == "APPROVER"
+        assert me_response.json()["organization_id"] == base_org_id
+        assert target_org_id != base_org_id
+
+        response = client.post(
+            "/api/tasks",
+            json={
+                "organization_id": target_org_id,
+                "sub_part": "겸임추가",
+                "major_task": "겸임 추가 파트 대업무",
+                "detail_task": "겸임 추가 파트 세부업무",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+            headers={"X-Employee-Id": employee_id},
+        )
+
+        assert response.status_code == 201
+        task_id = response.json()["id"]
+        assert response.json()["organization_id"] == target_org_id
+    finally:
+        if task_id is not None:
+            client.delete(f"/api/tasks/{task_id}", headers={"X-Employee-Id": "admin001"})
+        for org_id in (target_org_id, base_org_id):
+            client.delete(
+                f"/api/admin/organizations/{org_id}",
+                headers={"X-Employee-Id": "admin001"},
+            )
 
 
 def test_create_task_accepts_blank_optional_form_fields():
@@ -124,6 +477,7 @@ def test_bulk_task_create_uses_same_permissions_and_returns_created_rows():
     body = response.json()
     assert body["created_count"] == 2
     assert [task["major_task"] for task in body["tasks"]] == ["일괄 대업무 1", "일괄 대업무 2"]
+    assert {task["status"] for task in body["tasks"]} == {"UPLOADED"}
 
     for task in body["tasks"]:
         client.delete(f"/api/tasks/{task['id']}", headers={"X-Employee-Id": "part001"})

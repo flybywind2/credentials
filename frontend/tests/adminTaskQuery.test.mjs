@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { buildTaskFilterQuery, deriveHierarchyOptions, formatLatestReview } from "../js/adminTaskQuery.js";
+
+const adminTaskQuerySource = readFileSync(new URL("../js/adminTaskQuery.js", import.meta.url), "utf8");
 
 test("buildTaskFilterQuery omits empty filters", () => {
   assert.equal(
@@ -47,4 +50,10 @@ test("deriveHierarchyOptions narrows teams, groups, and parts by selected parent
     parts: ["A파트", "B파트"],
   });
   assert.deepEqual(deriveHierarchyOptions(organizations, { division: "A실", group: "B그룹" }).parts, ["B파트"]);
+});
+
+test("admin task query renders paginated results", () => {
+  assert.match(adminTaskQuerySource, /paginateItems/);
+  assert.match(adminTaskQuerySource, /data-admin-task-pagination/);
+  assert.match(adminTaskQuerySource, /admin-tasks/);
 });

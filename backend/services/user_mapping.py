@@ -124,7 +124,7 @@ def _resolve_org_head(
     if db is None:
         return None
 
-    org = db.scalar(
+    organizations = db.scalars(
         select(Organization).where(
             or_(
                 Organization.part_head_id == employee_id,
@@ -132,23 +132,33 @@ def _resolve_org_head(
                 Organization.team_head_id == employee_id,
                 Organization.division_head_id == employee_id,
             )
-        )
-    )
-    if org is None:
+        ).order_by(Organization.id)
+    ).all()
+    if not organizations:
         return None
 
-    if org.part_head_id == employee_id:
+    approver_org = next(
+        (
+            org
+            for org in organizations
+            if employee_id in {org.group_head_id, org.team_head_id, org.division_head_id}
+        ),
+        None,
+    )
+    own_part_org = next((org for org in organizations if org.part_head_id == employee_id), None)
+    org = own_part_org or approver_org or organizations[0]
+
+    if approver_org is not None:
+        role = "APPROVER"
+        if approver_org.group_head_id == employee_id:
+            name = approver_org.group_head_name or employee_id
+        elif approver_org.team_head_id == employee_id:
+            name = approver_org.team_head_name or employee_id
+        else:
+            name = approver_org.division_head_name
+    else:
         role = "INPUTTER"
         name = org.part_head_name
-    elif org.group_head_id == employee_id:
-        role = "APPROVER"
-        name = org.group_head_name or employee_id
-    elif org.team_head_id == employee_id:
-        role = "APPROVER"
-        name = org.team_head_name or employee_id
-    else:
-        role = "APPROVER"
-        name = org.division_head_name
 
     return _user_payload(
         employee_id=employee_id,

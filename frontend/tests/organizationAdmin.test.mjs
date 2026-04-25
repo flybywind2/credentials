@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { parseOrganizationCsvPreview } from "../js/organizationAdmin.js";
+
+const organizationAdminSource = readFileSync(new URL("../js/organizationAdmin.js", import.meta.url), "utf8");
 
 test("parseOrganizationCsvPreview maps Korean headers and org type", () => {
   const csv = [
@@ -24,4 +27,9 @@ test("parseOrganizationCsvPreview reports missing required headers", () => {
     () => parseOrganizationCsvPreview("실명,파트명\nAI실,AI파트"),
     /필수 헤더/,
   );
+});
+
+test("organization manager renders paginated organization rows", () => {
+  assert.match(organizationAdminSource, /paginateItems/);
+  assert.match(organizationAdminSource, /data-organization-pagination/);
 });

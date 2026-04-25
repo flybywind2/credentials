@@ -1,9 +1,9 @@
 import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260422-sso-token";
-import { renderApproval } from "./approval.js?v=20260422-url-routes";
-import { renderDashboard } from "./dashboard.js?v=20260422-user-permissions-a11y2";
-import { renderGroupReadonly } from "./groupReadonly.js?v=20260421-p1b";
-import { renderPartStatus } from "./partStatus.js?v=20260421-spec-complete";
-import { renderSpreadsheet } from "./spreadsheet.js?v=20260422-save-delete-errors";
+import { renderApproval } from "./approval.js?v=20260425-review-complete";
+import { renderDashboard } from "./dashboard.js?v=20260425-admin-scroll";
+import { renderGroupReadonly } from "./groupReadonly.js?v=20260425-group-pagination";
+import { renderPartStatus } from "./partStatus.js?v=20260425-part-member-admin";
+import { renderSpreadsheet } from "./spreadsheet.js?v=20260425-paste-grid";
 
 const routes = {
   inputter: renderSpreadsheet,
@@ -14,9 +14,9 @@ const routes = {
 };
 
 const routeItems = [
-  { key: "inputter", label: "입력자", path: "/inputter", roles: ["INPUTTER", "ADMIN"] },
-  { key: "status", label: "내 파트 현황", path: "/status", roles: ["INPUTTER", "ADMIN"] },
-  { key: "group", label: "그룹 조회", path: "/group", roles: ["INPUTTER", "ADMIN"] },
+  { key: "inputter", label: "입력자", path: "/inputter", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
+  { key: "status", label: "내 파트 현황", path: "/status", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
+  { key: "group", label: "그룹 조회", path: "/group", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
   { key: "approver", label: "승인자", path: "/approver", roles: ["APPROVER", "ADMIN"] },
   { key: "admin", label: "관리자", path: "/admin", roles: ["ADMIN"] },
 ];

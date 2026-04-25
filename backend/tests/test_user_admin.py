@@ -23,6 +23,45 @@ def test_admin_user_list_includes_seed_org_heads():
     assert users["div001"]["role"] == "APPROVER"
 
 
+def test_admin_user_list_prioritizes_approver_for_group_head_part_head_dual_role():
+    client = TestClient(app)
+    employee_id = f"dual{uuid4().hex[:8]}"
+    create_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "겸임목록실",
+            "division_head_name": "겸임목록실장",
+            "division_head_id": f"{employee_id}-div",
+            "team_name": "겸임목록팀",
+            "team_head_name": "겸임목록팀장",
+            "team_head_id": f"{employee_id}-team",
+            "group_name": "겸임목록그룹",
+            "group_head_name": "겸임목록그룹장",
+            "group_head_id": employee_id,
+            "part_name": "겸임목록파트",
+            "part_head_name": "겸임목록파트장",
+            "part_head_id": employee_id,
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert create_response.status_code == 201
+    org_id = create_response.json()["id"]
+
+    try:
+        response = client.get("/api/admin/users", headers={"X-Employee-Id": "admin001"})
+
+        assert response.status_code == 200
+        users = {item["employee_id"]: item for item in response.json()}
+        assert users[employee_id]["role"] == "APPROVER"
+        assert users[employee_id]["organization"]["id"] == org_id
+    finally:
+        client.delete(
+            f"/api/admin/organizations/{org_id}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+
 def test_admin_can_create_update_and_delete_user_permission():
     client = TestClient(app)
     employee_id = _employee_id()

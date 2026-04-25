@@ -4,14 +4,17 @@ import { readFileSync } from "node:fs";
 
 import {
   deleteConfirmationMessage,
+  editableOrganizationsForUser,
   firstErrorRow,
   groupValidationErrors,
   previewSelectionSummary,
   renderActionError,
+  selectedEditableOrganization,
   selectedPreviewRows,
 } from "../js/spreadsheet.js";
 
 const spreadsheetSource = readFileSync(new URL("../js/spreadsheet.js", import.meta.url), "utf8");
+const formSource = readFileSync(new URL("../js/form.js", import.meta.url), "utf8");
 
 test("groupValidationErrors groups backend cell errors by row", () => {
   const grouped = groupValidationErrors([
@@ -31,10 +34,61 @@ test("firstErrorRow returns the earliest row index", () => {
 
 test("spreadsheet source includes approval confirmation and excel preview flow", () => {
   assert.match(spreadsheetSource, /approval-confirm-modal/);
+  assert.match(spreadsheetSource, /\/api\/organizations/);
   assert.match(spreadsheetSource, /\/api\/tasks\/import\/preview/);
+  assert.match(spreadsheetSource, /\/api\/tasks\/bulk/);
+  assert.match(spreadsheetSource, /\/api\/part-members\?org_id=/);
+  assert.match(spreadsheetSource, /data-action="select-work-org"/);
+  assert.match(spreadsheetSource, /담당자/);
+  assert.match(formSource, /assignee_knox_ids/);
+  assert.match(formSource, /담당자 배정/);
+  assert.match(spreadsheetSource, /status === "UPLOADED"/);
+  assert.match(spreadsheetSource, /분류 저장 필요/);
   assert.match(spreadsheetSource, /data-action="save-all"/);
   assert.match(spreadsheetSource, /data-action="preview-save-selected"/);
   assert.match(spreadsheetSource, /data-action="preview-save-all"/);
+});
+
+test("spreadsheet paste modal uses a grid-oriented Excel paste flow", () => {
+  assert.match(spreadsheetSource, /parseClipboardToTasks/);
+  assert.match(spreadsheetSource, /Excel 붙여넣기/);
+  assert.match(spreadsheetSource, /text\/html/);
+  assert.match(spreadsheetSource, /data-paste-dropzone/);
+  assert.doesNotMatch(spreadsheetSource, /TSV 데이터/);
+});
+
+test("editableOrganizationsForUser returns subordinate parts for approvers", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "group001",
+    organization_id: 1,
+  };
+  const organizations = [
+    { id: 1, group_head_id: "group001", part_head_id: "part001", part_name: "A" },
+    { id: 2, group_head_id: "group001", part_head_id: "part002", part_name: "B" },
+    { id: 3, group_head_id: "other", part_head_id: "part003", part_name: "C" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [1, 2],
+  );
+});
+
+test("selectedEditableOrganization accepts selected subordinate part and falls back to current org", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "group001",
+    organization_id: 1,
+    organization: { id: 1, group_head_id: "group001", part_name: "A" },
+  };
+  const organizations = [
+    { id: 1, group_head_id: "group001", part_head_id: "part001", part_name: "A" },
+    { id: 2, group_head_id: "group001", part_head_id: "part002", part_name: "B" },
+  ];
+
+  assert.equal(selectedEditableOrganization(user, organizations, 2).id, 2);
+  assert.equal(selectedEditableOrganization(user, organizations, 999).id, 1);
 });
 
 test("spreadsheet source marks fixed columns for sticky layout", () => {

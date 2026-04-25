@@ -1,7 +1,9 @@
 import { fetchJson } from "./api.js";
 import { renderAdminTaskQuery } from "./adminTaskQuery.js?v=20260421-review2";
 import { formatDday, renderDeadlineManager } from "./deadlineAdmin.js?v=20260421-p1b";
-import { renderOrganizationManager } from "./organizationAdmin.js?v=20260421-p1b";
+import { renderOrganizationManager } from "./organizationAdmin.js?v=20260425-optional-division-head";
+import { renderPartMemberManager } from "./partMemberAdmin.js?v=20260425-part-member-admin";
+import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 import { renderQuestionManager } from "./questionAdmin.js?v=20260421-p1b";
 import { renderTooltipManager } from "./tooltipAdmin.js?v=20260421-p1b";
 import { renderUserManager } from "./userAdmin.js?v=20260422-user-permissions-a11y";
@@ -95,6 +97,39 @@ function renderApprovalDonut(statusCounts) {
   `;
 }
 
+function renderAdminPanel({ id, title, description = "", open = false, bodyId }) {
+  return `
+    <section class="admin-panel" data-admin-panel="${id}">
+      <div class="admin-panel-header">
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          ${description ? `<p>${escapeHtml(description)}</p>` : ""}
+        </div>
+        <button
+          type="button"
+          class="secondary-button compact-filter-button"
+          aria-expanded="${open}"
+          aria-controls="${bodyId}"
+          data-admin-toggle="${id}"
+        >${open ? "접기" : "펴기"}</button>
+      </div>
+      <div id="${bodyId}" class="admin-panel-body" ${open ? "" : "hidden"}></div>
+    </section>
+  `;
+}
+
+function bindAdminPanels(container) {
+  container.querySelectorAll("[data-admin-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const body = container.querySelector(`#${button.getAttribute("aria-controls")}`);
+      const nextOpen = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", String(nextOpen));
+      button.textContent = nextOpen ? "접기" : "펴기";
+      body.hidden = !nextOpen;
+    });
+  });
+}
+
 export async function renderDashboard(container) {
   const [summary, deadline, approvalStatus, completion, classification] = await Promise.all([
     fetchJson("/api/dashboard/summary"),
@@ -104,12 +139,16 @@ export async function renderDashboard(container) {
     fetchJson("/api/dashboard/classification-ratio"),
   ]);
   let visibleCompletion = sortDepartmentItems(completion.items, "part_asc");
+  let departmentPage = 1;
 
   function updateDepartmentRows() {
     const keyword = container.querySelector("[data-summary-filter]")?.value || "";
     const sortKey = container.querySelector("[data-summary-sort]")?.value || "part_asc";
     visibleCompletion = sortDepartmentItems(filterDepartmentItems(completion.items, keyword), sortKey);
-    container.querySelector("[data-department-summary-body]").innerHTML = departmentRows(visibleCompletion);
+    const page = paginateItems(visibleCompletion, departmentPage);
+    departmentPage = page.page;
+    container.querySelector("[data-department-summary-body]").innerHTML = departmentRows(page.items);
+    container.querySelector("[data-department-pagination]").innerHTML = renderPaginationControls(page, "department-summary");
   }
 
   container.innerHTML = `
@@ -171,23 +210,78 @@ export async function renderDashboard(container) {
             <tbody data-department-summary-body>${departmentRows(visibleCompletion)}</tbody>
           </table>
         </div>
+        <div data-department-pagination></div>
       </section>
-      <div id="deadline-manager-root"></div>
-      <div id="admin-task-query-root"></div>
-      <div id="user-manager-root"></div>
-      <div id="organization-manager-root"></div>
-      <div id="question-manager-root"></div>
-      <div id="tooltip-manager-root"></div>
+      ${renderAdminPanel({
+        id: "deadline",
+        title: "마감 관리",
+        description: "입력 마감일과 안내 문구를 관리합니다.",
+        open: true,
+        bodyId: "deadline-manager-root",
+      })}
+      ${renderAdminPanel({
+        id: "task-query",
+        title: "전체 데이터 조회",
+        description: "조직, 승인 상태, 판정 결과 기준으로 업무를 조회합니다.",
+        bodyId: "admin-task-query-root",
+      })}
+      ${renderAdminPanel({
+        id: "users",
+        title: "사용자 권한 관리",
+        description: "사용자 권한과 담당 조직을 관리합니다.",
+        bodyId: "user-manager-root",
+      })}
+      ${renderAdminPanel({
+        id: "part-members",
+        title: "파트원 명단 관리",
+        description: "파트원 명단 CSV를 업로드하고 확인합니다.",
+        bodyId: "part-member-manager-root",
+      })}
+      ${renderAdminPanel({
+        id: "organizations",
+        title: "조직 관리",
+        description: "조직 정보를 CSV 또는 수동 입력으로 관리합니다.",
+        bodyId: "organization-manager-root",
+      })}
+      ${renderAdminPanel({
+        id: "questions",
+        title: "판정 문항 관리",
+        description: "기밀 및 국가핵심기술 판단 문항을 관리합니다.",
+        bodyId: "question-manager-root",
+      })}
+      ${renderAdminPanel({
+        id: "tooltips",
+        title: "컬럼 예시 관리",
+        description: "입력 화면 컬럼 도움말 문구를 관리합니다.",
+        bodyId: "tooltip-manager-root",
+      })}
     </section>
   `;
   container.querySelector("[data-action='dashboard-export']").addEventListener("click", () => {
     window.location.href = "/api/export/excel";
   });
-  container.querySelector("[data-summary-filter]").addEventListener("input", updateDepartmentRows);
-  container.querySelector("[data-summary-sort]").addEventListener("change", updateDepartmentRows);
+  container.querySelector("[data-summary-filter]").addEventListener("input", () => {
+    departmentPage = 1;
+    updateDepartmentRows();
+  });
+  container.querySelector("[data-summary-sort]").addEventListener("change", () => {
+    departmentPage = 1;
+    updateDepartmentRows();
+  });
+  container.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-pagination-target='department-summary'] [data-page-action]");
+    if (!button) {
+      return;
+    }
+    departmentPage += button.dataset.pageAction === "next" ? 1 : -1;
+    updateDepartmentRows();
+  });
+  bindAdminPanels(container);
+  updateDepartmentRows();
   await renderDeadlineManager(container.querySelector("#deadline-manager-root"));
   await renderAdminTaskQuery(container.querySelector("#admin-task-query-root"));
   await renderUserManager(container.querySelector("#user-manager-root"));
+  await renderPartMemberManager(container.querySelector("#part-member-manager-root"));
   await renderOrganizationManager(container.querySelector("#organization-manager-root"));
   await renderQuestionManager(container.querySelector("#question-manager-root"));
   await renderTooltipManager(container.querySelector("#tooltip-manager-root"));

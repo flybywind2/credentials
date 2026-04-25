@@ -7,8 +7,12 @@ test("availableRoutesForRole limits inputters to input workflows", () => {
   assert.deepEqual(availableRoutesForRole("INPUTTER").map((item) => item.key), ["inputter", "status", "group"]);
 });
 
-test("availableRoutesForRole gives approvers approval access", () => {
-  assert.deepEqual(availableRoutesForRole("APPROVER").map((item) => item.key), ["approver"]);
+test("availableRoutesForRole gives approvers all non-admin workspaces", () => {
+  assert.deepEqual(
+    availableRoutesForRole("APPROVER").map((item) => item.key),
+    ["inputter", "status", "group", "approver"],
+  );
+  assert.equal(availableRoutesForRole("APPROVER").some((item) => item.key === "admin"), false);
 });
 
 test("availableRoutesForRole gives admins every workspace", () => {

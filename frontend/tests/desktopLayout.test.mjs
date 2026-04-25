@@ -6,7 +6,7 @@ const css = readFileSync(new URL("../css/style.css", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 test("frontend shell uses the review stylesheet", () => {
-  assert.match(html, /style\.css\?v=20260422-user-permissions/);
+  assert.match(html, /style\.css\?v=20260425-form-comments2/);
 });
 
 test("desktop layout fills the viewport and keeps a desktop minimum width", () => {
@@ -26,4 +26,11 @@ test("modal overlay sits above sticky data-table columns", () => {
   assert.ok(Number.isFinite(stickyHeaderZ), "sticky table header z-index should be explicit");
   assert.ok(Number.isFinite(modalOverlayZ), "modal overlay z-index should be explicit");
   assert.ok(modalOverlayZ > stickyHeaderZ);
+});
+
+test("excel import file label uses button-like vertical centering", () => {
+  const fileButtonBlock = css.match(/\.file-button\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
+
+  assert.match(fileButtonBlock, /display:\s*inline-flex;/);
+  assert.match(fileButtonBlock, /align-items:\s*center;/);
 });

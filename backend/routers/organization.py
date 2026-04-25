@@ -17,8 +17,8 @@ admin_router = APIRouter(prefix="/admin/organizations", tags=["admin-organizatio
 
 class OrganizationCreate(BaseModel):
     division_name: str
-    division_head_name: str
-    division_head_id: str
+    division_head_name: str | None = None
+    division_head_id: str | None = None
     team_name: str | None = None
     team_head_name: str | None = None
     team_head_id: str | None = None
@@ -49,9 +49,10 @@ class OrganizationUpdate(BaseModel):
 
 def _email_preview(org: Organization) -> dict[str, str]:
     preview = {
-        "division_head_email": f"{org.division_head_id}@samsung.com",
         "part_head_email": f"{org.part_head_id}@samsung.com",
     }
+    if org.division_head_id:
+        preview["division_head_email"] = f"{org.division_head_id}@samsung.com"
     if org.team_head_id:
         preview["team_head_email"] = f"{org.team_head_id}@samsung.com"
     if org.group_head_id:
@@ -103,9 +104,18 @@ def _org_type_from_row(row: dict[str, str]) -> str:
     return "NORMAL"
 
 
+def _normalize_organization_data(data: dict, include_missing_division_heads: bool = True) -> dict:
+    normalized = dict(data)
+    for field in ("division_head_name", "division_head_id"):
+        if include_missing_division_heads or field in normalized:
+            normalized[field] = normalized.get(field) or ""
+    return normalized
+
+
 def _organization_from_csv_row(row: dict[str, str]) -> Organization:
     data = {target: (row.get(source) or None) for source, target in CSV_FIELD_MAP.items()}
     data["org_type"] = _org_type_from_row(row)
+    data = _normalize_organization_data(data)
     return Organization(**data)
 
 
@@ -136,7 +146,7 @@ def create_organization(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     require_admin(user)
-    org = Organization(**payload.model_dump())
+    org = Organization(**_normalize_organization_data(payload.model_dump()))
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -183,7 +193,11 @@ def update_organization(
     org = db.get(Organization, organization_id)
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    update_data = _normalize_organization_data(
+        payload.model_dump(exclude_unset=True),
+        include_missing_division_heads=False,
+    )
+    for key, value in update_data.items():
         setattr(org, key, value)
     db.commit()
     db.refresh(org)

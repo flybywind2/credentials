@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validateTaskReviewPayload } from "../js/approval.js";
+import { reviewCompletionAction, validateTaskReviewPayload } from "../js/approval.js";
 
 const tasks = [{ id: 1 }, { id: 2 }];
 const approvalSource = readFileSync(new URL("../js/approval.js", import.meta.url), "utf8");
@@ -53,6 +53,30 @@ test("validateTaskReviewPayload accepts a complete rejection review", () => {
   );
 
   assert.equal(result.valid, true);
+});
+
+test("reviewCompletionAction rejects when any item is rejected", () => {
+  assert.equal(
+    reviewCompletionAction([
+      { task_id: 1, decision: "APPROVED", comment: "" },
+      { task_id: 2, decision: "REJECTED", comment: "분류 근거 보완" },
+    ]),
+    "reject",
+  );
+  assert.equal(
+    reviewCompletionAction([
+      { task_id: 1, decision: "APPROVED", comment: "" },
+      { task_id: 2, decision: "APPROVED", comment: "" },
+    ]),
+    "approve",
+  );
+});
+
+test("approval detail exposes a single review completion button", () => {
+  assert.match(approvalSource, /data-action="complete-detail"/);
+  assert.match(approvalSource, />검토 완료</);
+  assert.doesNotMatch(approvalSource, />검토 반려</);
+  assert.doesNotMatch(approvalSource, />검토 승인</);
 });
 
 test("approval detail opens reject reason modal for reviewed rejections", () => {

@@ -10,7 +10,7 @@ class TaskEntry(Base):
     __tablename__ = "task_entries"
     __table_args__ = (
         CheckConstraint(
-            "status in ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED')",
+            "status in ('UPLOADED', 'DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED')",
             name="ck_task_entries_status",
         ),
         CheckConstraint(

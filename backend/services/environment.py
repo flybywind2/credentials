@@ -26,7 +26,9 @@ def validate_runtime_settings(settings: Settings) -> None:
                 missing.append(name)
         if not settings.sso_token_secret and not settings.sso_client_secret:
             missing.append("SSO_TOKEN_SECRET")
-    if sso_mode not in {"mock", "disabled", "ldap", "saml"}:
+    if sso_mode == "broker" and not settings.sso_broker_employee_header:
+        missing.append("SSO_BROKER_EMPLOYEE_HEADER")
+    if sso_mode not in {"mock", "disabled", "broker", "ldap", "saml"}:
         missing.append("SSO_MODE")
     smtp_mode = settings.smtp_mode.lower()
     if smtp_mode == "smtp":
@@ -43,8 +45,6 @@ def validate_runtime_settings(settings: Settings) -> None:
         ]:
             if not value:
                 missing.append(name)
-        if settings.mail_api_payload_format.lower() not in {"json", "form"}:
-            missing.append("MAIL_API_PAYLOAD_FORMAT")
     if smtp_mode not in {"disabled", "smtp", "mail_api"}:
         missing.append("SMTP_MODE")
     if missing:

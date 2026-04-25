@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from backend.services.excel import write_workbook
 
 
 def test_submit_approval_blocks_invalid_confidential_task():
@@ -67,6 +68,107 @@ def test_admin_can_submit_approval_for_valid_div_direct_org():
     assert body["steps"][0]["approver_employee_id"] == "apd1"
 
     client.delete(f"/api/tasks/{task['id']}", headers={"X-Employee-Id": "admin001"})
+    client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
+
+
+def test_submit_approval_uses_actual_group_and_team_heads_when_division_head_is_missing():
+    client = TestClient(app)
+    org_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "무실장실",
+            "team_name": "무실장팀",
+            "team_head_name": "실제팀장",
+            "team_head_id": "actualteam1",
+            "group_name": "무실장그룹",
+            "group_head_name": "실제그룹장",
+            "group_head_id": "actualgroup1",
+            "part_name": "무실장파트",
+            "part_head_name": "무실장파트장",
+            "part_head_id": "nodivpart1",
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert org_response.status_code == 201
+    org = org_response.json()
+    task = client.post(
+        "/api/tasks",
+        json={
+            "organization_id": org["id"],
+            "major_task": "무실장 대업무",
+            "detail_task": "무실장 세부업무",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+
+    response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": "admin001"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["total_steps"] == 2
+    assert [
+        (step["approver_employee_id"], step["approver_name"], step["approver_role"])
+        for step in body["steps"]
+    ] == [
+        ("actualgroup1", "실제그룹장", "그룹장"),
+        ("actualteam1", "실제팀장", "팀장"),
+    ]
+
+    client.delete(f"/api/tasks/{task['id']}", headers={"X-Employee-Id": "admin001"})
+    client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
+
+
+def test_submit_approval_blocks_uploaded_rows_until_web_classification_is_saved():
+    client = TestClient(app)
+    org = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "업로드실",
+            "division_head_name": "업로드실장",
+            "division_head_id": "uploaddiv1",
+            "part_name": "업로드파트",
+            "part_head_name": "업로드파트장",
+            "part_head_id": "uploadpart1",
+            "org_type": "DIV_DIRECT",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+    workbook = write_workbook(
+        [
+            ["소파트", "대업무", "세부업무"],
+            ["업로드", "업로드 대업무", "업로드 세부업무"],
+        ],
+    )
+    imported = client.post(
+        f"/api/tasks/import?org_id={org['id']}",
+        files={
+            "file": (
+                "tasks.xlsx",
+                workbook,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+
+    response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": "admin001"},
+    )
+
+    assert imported["tasks"][0]["status"] == "UPLOADED"
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"] == "Task validation failed"
+    assert body["validation_errors"][0]["field"] == "status"
+
+    client.delete(f"/api/tasks/{imported['tasks'][0]['id']}", headers={"X-Employee-Id": "admin001"})
     client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
 
 

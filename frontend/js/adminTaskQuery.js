@@ -1,4 +1,5 @@
 import { fetchJson } from "./api.js";
+import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -83,12 +84,25 @@ function renderRows(items) {
 
 export async function renderAdminTaskQuery(container) {
   const organizations = await fetchJson("/api/organizations");
+  let currentItems = [];
+  let currentTotalCount = 0;
+  let currentPage = 1;
+
+  function updatePagedRows() {
+    const page = paginateItems(currentItems, currentPage);
+    currentPage = page.page;
+    container.querySelector("[data-admin-task-results]").innerHTML = renderRows(page.items);
+    container.querySelector("[data-admin-task-pagination]").innerHTML = renderPaginationControls(page, "admin-tasks");
+    container.querySelector("[data-admin-task-count]").textContent = `${currentTotalCount}건`;
+  }
 
   async function load(filters = {}) {
     const query = buildTaskFilterQuery(filters);
     const data = await fetchJson(`/api/admin/tasks${query ? `?${query}` : ""}`);
-    container.querySelector("[data-admin-task-results]").innerHTML = renderRows(data.items);
-    container.querySelector("[data-admin-task-count]").textContent = `${data.total_count}건`;
+    currentItems = data.items;
+    currentTotalCount = data.total_count;
+    currentPage = 1;
+    updatePagedRows();
   }
 
   container.innerHTML = `
@@ -110,6 +124,7 @@ export async function renderAdminTaskQuery(container) {
         <select class="toolbar-input" name="part" data-hierarchy-select="part"></select>
         <select class="toolbar-input" name="status">
           <option value="">전체 상태</option>
+          <option value="UPLOADED">UPLOADED</option>
           <option value="DRAFT">DRAFT</option>
           <option value="SUBMITTED">SUBMITTED</option>
           <option value="APPROVED">APPROVED</option>
@@ -144,6 +159,7 @@ export async function renderAdminTaskQuery(container) {
           <tbody data-admin-task-results></tbody>
         </table>
       </div>
+      <div data-admin-task-pagination></div>
     </section>
   `;
 
@@ -184,6 +200,14 @@ export async function renderAdminTaskQuery(container) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     await load(currentFilters());
+  });
+  container.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page-action]");
+    if (!button || !button.closest("[data-pagination-target='admin-tasks']")) {
+      return;
+    }
+    currentPage += button.dataset.pageAction === "next" ? 1 : -1;
+    updatePagedRows();
   });
   container.querySelector("[data-action='admin-export']").addEventListener("click", () => {
     const query = buildTaskFilterQuery(currentFilters());

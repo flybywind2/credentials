@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from backend.services.sso import LdapSsoAdapter, MockSsoAdapter, SamlSsoAdapter, get_sso_adapter
+from backend.services.sso import BrokerSsoAdapter, LdapSsoAdapter, MockSsoAdapter, SamlSsoAdapter, get_sso_adapter
 
 
 def test_mock_sso_adapter_authenticates_seed_users():
@@ -74,5 +74,16 @@ def test_directory_sso_adapter_requires_provider_url():
 
 def test_get_sso_adapter_selects_mock_ldap_or_saml_adapter():
     assert isinstance(get_sso_adapter("mock"), MockSsoAdapter)
+    assert isinstance(get_sso_adapter("broker"), BrokerSsoAdapter)
     assert isinstance(get_sso_adapter("ldap"), LdapSsoAdapter)
     assert isinstance(get_sso_adapter("saml"), SamlSsoAdapter)
+
+
+def test_broker_sso_adapter_rejects_form_login():
+    adapter = BrokerSsoAdapter()
+
+    with pytest.raises(HTTPException) as exc_info:
+        adapter.authenticate("part001")
+
+    assert exc_info.value.status_code == 400
+    assert "broker header" in exc_info.value.detail

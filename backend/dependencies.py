@@ -1,38 +1,25 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from backend.config import settings
 from backend.database import get_db
-from backend.services.auth_tokens import verify_access_token
-from backend.services.user_mapping import resolve_app_user
-
-
-def _bearer_token(authorization: str | None) -> str | None:
-    if not authorization:
-        return None
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        return None
-    return token
-
-
-def _strip_token_claims(payload: dict) -> dict:
-    return {key: value for key, value in payload.items() if key not in {"iat", "exp"}}
+from backend.models import Organization
+from backend.services.current_user import resolve_current_user_from_request
 
 
 def get_current_user(
     db: Annotated[Session, Depends(get_db)],
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
     x_employee_id: Annotated[str | None, Header()] = None,
 ) -> dict:
-    token = _bearer_token(authorization)
-    if token:
-        return _strip_token_claims(verify_access_token(token))
-    if settings.sso_mode.lower() == "mock":
-        return resolve_app_user(x_employee_id or "admin001", db=db, provider="mock")
-    raise HTTPException(status_code=401, detail="Authentication required")
+    return resolve_current_user_from_request(
+        db=db,
+        request=request,
+        authorization=authorization,
+        x_employee_id=x_employee_id,
+    )
 
 
 def require_admin(user: dict) -> None:
@@ -55,9 +42,30 @@ def ensure_can_read_org(user: dict, org_id: int | None) -> None:
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 
-def ensure_can_write_org(user: dict, org_id: int) -> None:
+def _is_approver_for_org(user: dict, org: Organization | None) -> bool:
+    if org is None:
+        return False
+    return user["employee_id"] in {
+        org.group_head_id,
+        org.team_head_id,
+        org.division_head_id,
+        org.part_head_id,
+    }
+
+
+def ensure_can_write_org(user: dict, org_id: int, db: Session | None = None) -> None:
     if user["role"] == "ADMIN":
         return
     if user["role"] == "INPUTTER" and user["organization_id"] == org_id:
         return
+    organization = user.get("organization") or {}
+    if (
+        user["role"] == "APPROVER"
+        and user["organization_id"] == org_id
+        and organization.get("part_head_id") == user["employee_id"]
+    ):
+        return
+    if user["role"] == "APPROVER" and db is not None:
+        if _is_approver_for_org(user, db.get(Organization, org_id)):
+            return
     raise HTTPException(status_code=403, detail="Insufficient permissions")

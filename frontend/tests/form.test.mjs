@@ -107,10 +107,30 @@ test("selectNoneOptionsForSection checks only none options in a classification s
   assert.equal(secondPositive.checked, false);
 });
 
+test("question none option is selected by default only when no answer exists", () => {
+  assert.equal(typeof formModule.isQuestionOptionSelected, "function");
+
+  assert.equal(formModule.isQuestionOptionSelected(undefined, "해당 없음"), true);
+  assert.equal(formModule.isQuestionOptionSelected([], "해당 없음"), true);
+  assert.equal(formModule.isQuestionOptionSelected([], "설계 자료"), false);
+  assert.equal(formModule.isQuestionOptionSelected(["설계 자료"], "해당 없음"), false);
+  assert.equal(formModule.isQuestionOptionSelected(["설계 자료"], "설계 자료"), true);
+});
+
 test("task form exposes bulk none selection buttons for confidential and national tech", () => {
   assert.match(formSource, /data-action="select-none-options"/);
   assert.match(formSource, /data-none-target="\$\{type\}"/);
   assert.match(formSource, /해당 없음 일괄 선택/);
+});
+
+test("task form reserves consistent field height and keeps owner radios compact", () => {
+  const styleSource = readFileSync(new URL("../css/style.css", import.meta.url), "utf8");
+
+  assert.match(formSource, /data-error-for="sub_part"/);
+  assert.match(styleSource, /input:not\(\[type="radio"\]\):not\(\[type="checkbox"\]\)/);
+  assert.match(styleSource, /\.dependent-grid label:not\(\.choice-chip\)/);
+  assert.match(styleSource, /\.radio-group \.choice-chip/);
+  assert.match(styleSource, /input\[type="radio"\]/);
 });
 
 test("task form keeps the modal open and shows a visible error when save fails", () => {

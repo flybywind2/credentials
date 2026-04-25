@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings as runtime_settings
 from backend.logging_config import setup_logging
-from backend.routers import approval, auth, dashboard, export, health, organization, question, settings, task, user_admin
+from backend.routers import approval, auth, dashboard, export, health, organization, part_member, question, settings, task, user_admin
 from backend.scripts.init_db import initialize_database
 from backend.services.environment import validate_runtime_settings
 
@@ -24,6 +24,7 @@ app = FastAPI(title="기밀분류시스템 API")
 app.include_router(auth.router, prefix="/api")
 app.include_router(organization.router, prefix="/api")
 app.include_router(organization.admin_router, prefix="/api")
+app.include_router(part_member.router, prefix="/api")
 app.include_router(task.router, prefix="/api")
 app.include_router(task.admin_router, prefix="/api")
 app.include_router(question.router, prefix="/api")

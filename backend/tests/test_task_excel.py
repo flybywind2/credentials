@@ -14,47 +14,15 @@ def test_task_template_downloads_excel_headers():
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     rows = parse_workbook(response.content)
-    assert rows[0][0:3] == ["소파트", "대업무", "세부업무"]
+    assert rows[0] == ["소파트", "대업무", "세부업무"]
 
 
 def test_task_excel_import_creates_rows():
     client = TestClient(app)
     workbook = write_workbook(
         [
-            [
-                "소파트",
-                "대업무",
-                "세부업무",
-                "기밀 문항 1",
-                "기밀 데이터 유형",
-                "기밀 소유자/사용자",
-                "국가핵심기술 문항 1",
-                "국가핵심기술 데이터 유형",
-                "국가핵심기술 소유자/사용자",
-                "Compliance 해당",
-                "Compliance 데이터 유형",
-                "Compliance 소유자/사용자",
-                "보관 장소",
-                "관련 메뉴",
-                "공유 범위",
-            ],
-            [
-                "엑셀",
-                "엑셀 대업무",
-                "엑셀 세부업무",
-                "해당 없음",
-                "",
-                "",
-                "해당 없음",
-                "",
-                "",
-                "비해당",
-                "",
-                "",
-                "문서함",
-                "분류 메뉴",
-                "실/팀/그룹",
-            ],
+            ["소파트", "대업무", "세부업무"],
+            ["엑셀", "엑셀 대업무", "엑셀 세부업무"],
         ],
     )
 
@@ -74,6 +42,10 @@ def test_task_excel_import_creates_rows():
     body = response.json()
     assert body["imported_count"] == 1
     assert body["tasks"][0]["major_task"] == "엑셀 대업무"
+    assert body["tasks"][0]["status"] == "UPLOADED"
+    assert body["tasks"][0]["confidential_answers"] == []
+    assert body["tasks"][0]["national_tech_answers"] == []
+    assert body["tasks"][0]["is_compliance"] is False
 
 
 def test_task_excel_import_preview_validates_without_creating_rows():
@@ -81,40 +53,8 @@ def test_task_excel_import_preview_validates_without_creating_rows():
     before_count = len(client.get("/api/tasks", headers={"X-Employee-Id": "part001"}).json())
     workbook = write_workbook(
         [
-            [
-                "소파트",
-                "대업무",
-                "세부업무",
-                "기밀 문항 1",
-                "기밀 데이터 유형",
-                "기밀 소유자/사용자",
-                "국가핵심기술 문항 1",
-                "국가핵심기술 데이터 유형",
-                "국가핵심기술 소유자/사용자",
-                "Compliance 해당",
-                "Compliance 데이터 유형",
-                "Compliance 소유자/사용자",
-                "보관 장소",
-                "관련 메뉴",
-                "공유 범위",
-            ],
-            [
-                "엑셀",
-                "",
-                "세부업무만 있음",
-                "해당 없음",
-                "",
-                "",
-                "해당 없음",
-                "",
-                "",
-                "비해당",
-                "",
-                "",
-                "문서함",
-                "분류 메뉴",
-                "실/팀/그룹",
-            ],
+            ["소파트", "대업무", "세부업무"],
+            ["엑셀", "", "세부업무만 있음"],
         ],
     )
 
@@ -137,6 +77,44 @@ def test_task_excel_import_preview_validates_without_creating_rows():
     assert body["error_count"] >= 1
     assert body["rows"][0]["detail_task"] == "세부업무만 있음"
     assert len(client.get("/api/tasks", headers={"X-Employee-Id": "part001"}).json()) == before_count
+
+
+def test_web_update_converts_uploaded_task_to_draft():
+    client = TestClient(app)
+    workbook = write_workbook(
+        [
+            ["소파트", "대업무", "세부업무"],
+            ["엑셀", "웹분류 대업무", "웹분류 세부업무"],
+        ],
+    )
+    imported = client.post(
+        "/api/tasks/import",
+        files={
+            "file": (
+                "tasks.xlsx",
+                workbook,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers={"X-Employee-Id": "part001"},
+    ).json()
+    task = imported["tasks"][0]
+
+    response = client.put(
+        f"/api/tasks/{task['id']}",
+        json={
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+            "is_compliance": False,
+        },
+        headers={"X-Employee-Id": "part001"},
+    )
+
+    assert task["status"] == "UPLOADED"
+    assert response.status_code == 200
+    assert response.json()["status"] == "DRAFT"
+
+    client.delete(f"/api/tasks/{task['id']}", headers={"X-Employee-Id": "part001"})
 
 
 def test_admin_excel_export_supports_filters():

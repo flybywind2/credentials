@@ -12,6 +12,8 @@ dev.db
 logs/
 output/
 test-results/
+server.local*.log
+uvicorn*.log
 
 # Environment and secrets
 .env

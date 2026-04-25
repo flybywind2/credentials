@@ -153,10 +153,10 @@ def _known_users(db: Session) -> list[dict]:
 
     for org in organizations_by_id.values():
         candidates = [
-            (org.part_head_id, org.part_head_name, "INPUTTER"),
             (org.group_head_id, org.group_head_name, "APPROVER"),
             (org.team_head_id, org.team_head_name, "APPROVER"),
             (org.division_head_id, org.division_head_name, "APPROVER"),
+            (org.part_head_id, org.part_head_name, "INPUTTER"),
         ]
         for employee_id, name, role in candidates:
             if not employee_id:

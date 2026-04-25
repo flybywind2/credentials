@@ -1,22 +1,3 @@
-const TRUE_VALUES = new Set(["Y", "YES", "TRUE", "1", "O", "해당"]);
-const OWNER_VALUES = new Map([
-  ["OWNER", "OWNER"],
-  ["소유자", "OWNER"],
-  ["USER", "USER"],
-  ["사용자", "USER"],
-]);
-const SHARE_SCOPE_VALUES = new Map([
-  ["DIVISION_BU", "DIVISION_BU"],
-  ["부문/사업부", "DIVISION_BU"],
-  ["부문", "DIVISION_BU"],
-  ["BUSINESS_UNIT", "BUSINESS_UNIT"],
-  ["사업부", "BUSINESS_UNIT"],
-  ["ORG_UNIT", "ORG_UNIT"],
-  ["실·팀·그룹", "ORG_UNIT"],
-  ["실/팀/그룹", "ORG_UNIT"],
-  ["실팀그룹", "ORG_UNIT"],
-]);
-
 function parseTsvRows(text) {
   const rows = [[]];
   let cell = "";
@@ -65,44 +46,56 @@ function hasHeader(row) {
     && row[2]?.trim() === "세부업무";
 }
 
-function splitOptions(value) {
+function decodeHtmlText(value) {
   return String(value ?? "")
-    .split(/[;,|、]/)
-    .map((option) => option.trim())
-    .filter(Boolean);
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&#160;", " ")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", "\"")
+    .replaceAll("&#39;", "'")
+    .replaceAll("&#039;", "'");
 }
 
-function normalizeOwner(value) {
-  const trimmed = String(value ?? "").trim();
-  return OWNER_VALUES.get(trimmed.toUpperCase()) || OWNER_VALUES.get(trimmed) || trimmed;
+function htmlCellToText(value) {
+  return decodeHtmlText(
+    String(value ?? "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\u00a0/g, " "),
+  ).trim();
 }
 
-function normalizeShareScope(value) {
-  const trimmed = String(value ?? "").trim();
-  return SHARE_SCOPE_VALUES.get(trimmed.toUpperCase())
-    || SHARE_SCOPE_VALUES.get(trimmed)
-    || trimmed;
+function parseHtmlTableRows(html) {
+  if (!html || !String(html).match(/<table[\s>]/i)) {
+    return [];
+  }
+
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const table = doc.querySelector("table");
+    if (table) {
+      return [...table.querySelectorAll("tr")]
+        .map((row) => [...row.querySelectorAll("th,td")]
+          .map((cell) => (cell.textContent || "").replace(/\u00a0/g, " ").trim()))
+        .filter((row) => row.some((value) => value.trim()));
+    }
+  }
+
+  const tableHtml = String(html).match(/<table[\s\S]*?<\/table>/i)?.[0] || "";
+  const rowMatches = tableHtml.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  return rowMatches
+    .map((rowHtml) => (rowHtml.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) || [])
+      .map((cellHtml) => htmlCellToText(cellHtml)))
+    .filter((row) => row.some((value) => value.trim()));
 }
 
-function normalizeCompliance(value) {
-  return TRUE_VALUES.has(String(value ?? "").trim().toUpperCase());
-}
-
-function mapAnswers(row, questions, startIndex) {
-  return questions.map((question, offset) => ({
-    question_id: question.id,
-    selected_options: splitOptions(row[startIndex + offset] || ""),
-  }));
-}
-
-export function parseTsvToTasks(text, questions = {}, options = {}) {
-  const rows = parseTsvRows(text);
+function rowsToTasks(rows, options = {}) {
   if (rows.length && hasHeader(rows[0])) {
     rows.shift();
   }
 
-  const confidentialQuestions = questions.confidential || [];
-  const nationalTechQuestions = questions.national_tech || [];
   const organizationId = options.organizationId ?? 1;
 
   return rows.map((row) => {
@@ -110,38 +103,37 @@ export function parseTsvToTasks(text, questions = {}, options = {}) {
     const subPart = row[cursor++]?.trim() || "";
     const majorTask = row[cursor++]?.trim() || "";
     const detailTask = row[cursor++]?.trim() || "";
-    const confidentialAnswers = mapAnswers(row, confidentialQuestions, cursor);
-    cursor += confidentialQuestions.length;
-    const confDataType = row[cursor++]?.trim() || "";
-    const confOwnerUser = normalizeOwner(row[cursor++] || "");
-    const nationalTechAnswers = mapAnswers(row, nationalTechQuestions, cursor);
-    cursor += nationalTechQuestions.length;
-    const ntechDataType = row[cursor++]?.trim() || "";
-    const ntechOwnerUser = normalizeOwner(row[cursor++] || "");
-    const isCompliance = normalizeCompliance(row[cursor++] || "");
-    const compDataType = row[cursor++]?.trim() || "";
-    const compOwnerUser = normalizeOwner(row[cursor++] || "");
-    const storageLocation = row[cursor++]?.trim() || "";
-    const relatedMenu = row[cursor++]?.trim() || "";
-    const shareScope = normalizeShareScope(row[cursor++] || "");
 
     return {
       organization_id: organizationId,
       sub_part: subPart,
       major_task: majorTask,
       detail_task: detailTask,
-      confidential_answers: confidentialAnswers,
-      conf_data_type: confDataType,
-      conf_owner_user: confOwnerUser,
-      national_tech_answers: nationalTechAnswers,
-      ntech_data_type: ntechDataType,
-      ntech_owner_user: ntechOwnerUser,
-      is_compliance: isCompliance,
-      comp_data_type: compDataType,
-      comp_owner_user: compOwnerUser,
-      storage_location: storageLocation,
-      related_menu: relatedMenu,
-      share_scope: shareScope,
+      confidential_answers: [],
+      conf_data_type: "",
+      conf_owner_user: "",
+      national_tech_answers: [],
+      ntech_data_type: "",
+      ntech_owner_user: "",
+      is_compliance: false,
+      comp_data_type: "",
+      comp_owner_user: "",
+      storage_location: "",
+      related_menu: "",
+      share_scope: "",
     };
   });
+}
+
+export function parseTsvToTasks(text, questions = {}, options = {}) {
+  return rowsToTasks(parseTsvRows(text), options);
+}
+
+export function parseClipboardToTasks(payload, questions = {}, options = {}) {
+  const clipboard = typeof payload === "string" ? { text: payload, html: "" } : (payload || {});
+  const htmlRows = parseHtmlTableRows(clipboard.html || "");
+  if (htmlRows.length) {
+    return rowsToTasks(htmlRows, options);
+  }
+  return parseTsvToTasks(clipboard.text || "", questions, options);
 }

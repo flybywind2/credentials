@@ -139,6 +139,14 @@ def _serialize_task_reviews(db: Session, approval_request_id: int) -> list[dict]
 def _submission_errors(tasks: list[TaskEntry]) -> list[dict]:
     errors = []
     for task in tasks:
+        if task.status == "UPLOADED":
+            errors.append(
+                {
+                    "task_id": task.id,
+                    "field": "status",
+                    "message": "Excel/붙여넣기 업로드 행은 웹에서 분류 저장 후 승인 요청할 수 있습니다.",
+                }
+            )
         if not task.major_task:
             errors.append({"task_id": task.id, "field": "major_task", "message": "대업무는 필수입니다."})
         if not task.detail_task:
@@ -422,7 +430,7 @@ def submit_approval(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    ensure_can_write_org(user, org_id)
+    ensure_can_write_org(user, org_id, db)
     org = db.get(Organization, org_id)
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")

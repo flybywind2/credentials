@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseTsvToTasks } from "../js/clipboard.js";
+import { parseClipboardToTasks, parseTsvToTasks } from "../js/clipboard.js";
 
 const questions = {
   confidential: [
@@ -12,10 +12,10 @@ const questions = {
   ],
 };
 
-test("parseTsvToTasks maps standard column order into task payloads", () => {
+test("parseTsvToTasks maps only task identity columns for web classification", () => {
   const tsv = [
-    "소파트\t대업무\t세부업무\t기밀 문항 1\t기밀 데이터 유형\t기밀 소유자/사용자\t국가핵심기술 문항 1\t국가핵심기술 데이터 유형\t국가핵심기술 소유자/사용자\tCompliance 해당\tCompliance 데이터 유형\tCompliance 소유자/사용자\t보관 장소\t관련 메뉴\t공유 범위",
-    "분석\t대업무 A\t세부업무 A\t설계 자료;공정 조건\t설계문서\t소유자\t해당 없음\t\t\tY\t계약정보\t사용자\t문서함\t분류 메뉴\t실/팀/그룹",
+    "소파트\t대업무\t세부업무",
+    "분석\t대업무 A\t세부업무 A",
   ].join("\n");
 
   const rows = parseTsvToTasks(tsv, questions, { organizationId: 7 });
@@ -26,36 +26,67 @@ test("parseTsvToTasks maps standard column order into task payloads", () => {
       sub_part: "분석",
       major_task: "대업무 A",
       detail_task: "세부업무 A",
-      confidential_answers: [
-        { question_id: 11, selected_options: ["설계 자료", "공정 조건"] },
-      ],
-      conf_data_type: "설계문서",
-      conf_owner_user: "OWNER",
-      national_tech_answers: [
-        { question_id: 21, selected_options: ["해당 없음"] },
-      ],
+      confidential_answers: [],
+      conf_data_type: "",
+      conf_owner_user: "",
+      national_tech_answers: [],
       ntech_data_type: "",
       ntech_owner_user: "",
-      is_compliance: true,
-      comp_data_type: "계약정보",
-      comp_owner_user: "USER",
-      storage_location: "문서함",
-      related_menu: "분류 메뉴",
-      share_scope: "ORG_UNIT",
+      is_compliance: false,
+      comp_data_type: "",
+      comp_owner_user: "",
+      storage_location: "",
+      related_menu: "",
+      share_scope: "",
     },
   ]);
 });
 
 test("parseTsvToTasks keeps empty rows out and supports Excel quoted cells", () => {
-  const tsv = "\"파트\tA\"\t대업무 B\t\"세부업무\nB\"\t해당 없음\t\t\t반도체 공정\t기술자료\tOWNER\t비해당\t\t\t저장소\t메뉴\t사업부\n\n";
+  const tsv = "\"파트\tA\"\t대업무 B\t\"세부업무\nB\"\n\n";
 
   const rows = parseTsvToTasks(tsv, questions);
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].sub_part, "파트\tA");
   assert.equal(rows[0].detail_task, "세부업무\nB");
-  assert.equal(rows[0].national_tech_answers[0].selected_options[0], "반도체 공정");
-  assert.equal(rows[0].ntech_owner_user, "OWNER");
+  assert.deepEqual(rows[0].national_tech_answers, []);
   assert.equal(rows[0].is_compliance, false);
-  assert.equal(rows[0].share_scope, "BUSINESS_UNIT");
+  assert.equal(rows[0].share_scope, "");
+});
+
+test("parseClipboardToTasks prefers Excel html tables over plain text", () => {
+  const html = `
+    <html>
+      <body>
+        <table>
+          <tr><th>소파트</th><th>대업무</th><th>세부업무</th></tr>
+          <tr><td>기획</td><td>연간 계획</td><td>부서별 계획 수립</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+  const rows = parseClipboardToTasks(
+    { html, text: "무시\t무시\t무시" },
+    questions,
+    { organizationId: 9 },
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].organization_id, 9);
+  assert.equal(rows[0].sub_part, "기획");
+  assert.equal(rows[0].major_task, "연간 계획");
+  assert.equal(rows[0].detail_task, "부서별 계획 수립");
+});
+
+test("parseClipboardToTasks falls back to TSV text", () => {
+  const rows = parseClipboardToTasks(
+    { html: "", text: "소파트\t대업무\t세부업무\n운영\t정기 점검\t월간 점검" },
+    questions,
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].sub_part, "운영");
+  assert.equal(rows[0].major_task, "정기 점검");
+  assert.equal(rows[0].detail_task, "월간 점검");
 });

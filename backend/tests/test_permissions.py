@@ -31,6 +31,22 @@ def test_inputter_cannot_read_pending_approvals():
     assert response.status_code == 403
 
 
+def test_inputter_header_is_not_upgraded_by_stale_admin_bearer_token():
+    client = TestClient(app)
+    login_response = client.post("/api/auth/login", json={"employee_id": "admin001"})
+    token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/api/approvals/pending",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Employee-Id": "part001",
+        },
+    )
+
+    assert response.status_code == 403
+
+
 def test_approver_can_read_pending_approvals():
     client = TestClient(app)
 

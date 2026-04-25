@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from backend.main import app
 
 
-def test_inputter_can_read_same_group_org_but_cannot_write_it():
+def test_inputter_cannot_read_same_group_org_tasks():
     client = TestClient(app)
     org = client.post(
         "/api/admin/organizations",
@@ -34,10 +34,12 @@ def test_inputter_can_read_same_group_org_but_cannot_write_it():
         headers={"X-Employee-Id": "admin001"},
     )
 
-    read_response = client.get(
+    direct_read_response = client.get(
         f"/api/tasks?org_id={org['id']}",
         headers={"X-Employee-Id": "part001"},
     )
+    list_response = client.get("/api/tasks", headers={"X-Employee-Id": "part001"})
+    group_response = client.get("/api/tasks/group", headers={"X-Employee-Id": "part001"})
     write_response = client.post(
         "/api/tasks",
         json={
@@ -48,6 +50,7 @@ def test_inputter_can_read_same_group_org_but_cannot_write_it():
         headers={"X-Employee-Id": "part001"},
     )
 
-    assert read_response.status_code == 200
-    assert read_response.json()[0]["part_name"] == "동일그룹파트"
+    assert direct_read_response.status_code == 403
+    assert org["id"] not in {row["organization_id"] for row in list_response.json()}
+    assert group_response.status_code == 403
     assert write_response.status_code == 403

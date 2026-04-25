@@ -17,7 +17,7 @@ const routes = {
 const routeItems = [
   { key: "inputter", label: "업무 입력", path: "/inputter", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
   { key: "status", label: "진행 현황", path: "/status", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
-  { key: "group", label: "그룹 업무 조회", path: "/group", roles: ["INPUTTER", "APPROVER", "ADMIN"] },
+  { key: "group", label: "그룹 업무 조회", path: "/group", roles: ["APPROVER", "ADMIN"] },
   { key: "approver", label: "승인 검토", path: "/approver", roles: ["APPROVER", "ADMIN"] },
   { key: "admin", label: "시스템 관리", path: "/admin", roles: ["ADMIN"] },
 ];

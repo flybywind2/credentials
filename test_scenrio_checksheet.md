@@ -99,6 +99,7 @@
 
 ```powershell
 python -m pytest backend/tests/test_sso_adapter.py backend/tests/test_auth_login.py backend/tests/test_email_and_environment.py -p no:cacheprovider
+python -m pytest backend/tests/test_user_admin.py backend/tests/test_permissions.py backend/tests/test_same_group_readonly.py -p no:cacheprovider
 python -m pytest backend/tests/test_approval_notifications.py backend/tests/test_approval_submit.py backend/tests/test_approval_actions.py -p no:cacheprovider
 node --test frontend\tests\*.test.mjs
 ```
@@ -107,6 +108,9 @@ node --test frontend\tests\*.test.mjs
 | --- | --- | --- | --- |
 | [ ] | SSO adapter 단위 테스트 | mock/broker/ldap/saml adapter 선택 및 검증 로직 통과 |  |
 | [ ] | 로그인 API 테스트 | `/api/auth/login`, token 발급, `/api/auth/me` 통과 |  |
+| [ ] | 담당조직 변경 테스트 | 관리자 사용자 권한관리에서 담당조직 변경 후 `auth/me`, 조직 목록, 업무 조회 범위가 변경됨 |  |
+| [ ] | 기존 토큰 갱신 테스트 | 담당조직 변경 전 발급된 token으로 `/api/auth/me`를 호출해도 DB의 최신 담당조직이 반영됨 |  |
+| [ ] | 조직장 자동계정 override 테스트 | 조직장 자동계정을 관리 사용자로 등록하면 기존 자동 조직장 범위가 섞이지 않음 |  |
 | [ ] | 메일 서비스 테스트 | disabled/smtp/mail_api 선택과 payload mapping 통과 |  |
 | [ ] | 승인 알림 테스트 | 제출/승인/반려 시 알림 경계 로직 통과 |  |
 | [ ] | 프론트 테스트 | 로그인, 라우팅, 승인/입력 화면 회귀 없음 |  |
@@ -170,6 +174,13 @@ uvicorn backend.main:app --reload --port 8000
 | [ ] | 입력자 화면 | 파트장/입력자 계정으로 접속 | 업무 입력 가능, 타 파트 수정 제한 |  |
 | [ ] | 승인자 화면 | 그룹장/팀장/실장 계정으로 접속 | 본인 승인 단계 요청만 검토 가능 |  |
 | [ ] | 관리자 화면 | 관리자 계정으로 접속 | 시스템 관리, 전체 조회 가능 |  |
+| [ ] | 입력자 담당조직 변경 반영 | 관리자 화면에서 입력자 담당조직을 다른 파트로 변경 후 해당 입력자로 재접속 또는 새로고침 | 새 담당 파트만 조직 목록/업무 목록에 표시되고 이전 파트 접근은 403 |  |
+| [ ] | 승인자 담당조직 변경 반영 | 조직장 자동계정을 사용자 권한관리에서 다른 담당조직으로 등록 후 해당 승인자로 재접속 또는 새로고침 | 새 담당조직 기준의 그룹 범위만 표시되고 기존 자동 조직장 범위는 표시되지 않음 |  |
+| [ ] | 상위관리자 기준파트 오인 방지 | 실제 파트장이 아닌 상위관리자에게 기준 파트를 지정한 뒤 업무 입력/수정/승인요청/파트 인력현황 접근 시도 | 기준 파트는 조회 범위 계산에만 사용되고, 파트장/입력자 권한이나 파트 구성원 권한은 부여되지 않음 |  |
+| [ ] | 실제 조직장 권한 유지 | 실제 그룹장/팀장/실장 ID가 CSV 조직장 필드에 들어간 계정으로 하위 파트 조회 | 실제 조직장은 하위 파트 업무/인력현황 조회 가능 |  |
+| [ ] | 기존 로그인 세션 반영 | 담당조직 변경 전 로그인해 둔 브라우저에서 새로고침 | 로그아웃 없이도 `/api/auth/me`와 화면 범위가 최신 담당조직 기준으로 갱신 |  |
+| [ ] | 입력자 그룹조회 차단 | 입력자 계정으로 `/group` 직접 접근 또는 `/api/tasks/group` 호출 | 메뉴에 그룹 조회가 없고 API는 403 |  |
+| [ ] | 승인자 그룹조회 범위 | 승인자 계정으로 그룹 업무 조회 접속 | 같은 담당 그룹의 파트 업무만 표시, 타 그룹/전체 파트 제외 |  |
 
 ## 7. 메일 직접 동작 테스트
 

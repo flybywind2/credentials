@@ -65,6 +65,66 @@ def test_mock_me_uses_employee_id_header_when_bearer_token_is_for_another_user()
     assert body["role"] == "APPROVER"
 
 
+def test_token_me_refreshes_managed_user_from_database_after_org_change(monkeypatch):
+    client = TestClient(app)
+    employee_id = f"token-org{uuid4().hex[:8]}"
+    create_user_response = client.post(
+        "/api/admin/users",
+        json={
+            "employee_id": employee_id,
+            "name": "토큰조직변경",
+            "role": "INPUTTER",
+            "organization_id": 1,
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert create_user_response.status_code == 201
+    login_response = client.post("/api/auth/login", json={"employee_id": employee_id})
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+    create_org_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "토큰변경실",
+            "division_head_name": "토큰실장",
+            "division_head_id": f"{employee_id}-div",
+            "team_name": "토큰변경팀",
+            "team_head_name": "토큰팀장",
+            "team_head_id": f"{employee_id}-team",
+            "group_name": "토큰변경그룹",
+            "group_head_name": "토큰그룹장",
+            "group_head_id": f"{employee_id}-group",
+            "part_name": "토큰변경파트",
+            "part_head_name": "토큰파트장",
+            "part_head_id": f"{employee_id}-part",
+            "org_type": "NORMAL",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert create_org_response.status_code == 201
+    next_org_id = create_org_response.json()["id"]
+    update_user_response = client.put(
+        f"/api/admin/users/{employee_id}",
+        json={"organization_id": next_org_id},
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert update_user_response.status_code == 200
+    monkeypatch.setattr(current_user_module, "settings", Settings(sso_mode="token"))
+
+    try:
+        response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["employee_id"] == employee_id
+        assert body["organization_id"] == next_org_id
+        assert body["organization"]["part_name"] == "토큰변경파트"
+    finally:
+        monkeypatch.setattr(current_user_module, "settings", Settings())
+        client.delete(f"/api/admin/users/{employee_id}", headers={"X-Employee-Id": "admin001"})
+        client.delete(f"/api/admin/organizations/{next_org_id}", headers={"X-Employee-Id": "admin001"})
+
+
 def test_broker_me_uses_broker_header_instead_of_dev_header_or_stale_token(monkeypatch):
     client = TestClient(app)
     login_response = client.post("/api/auth/login", json={"employee_id": "admin001"})

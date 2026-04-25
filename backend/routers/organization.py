@@ -80,6 +80,30 @@ def _serialize(org: Organization) -> dict:
     }
 
 
+def _scoped_organization_query(user: dict):
+    query = select(Organization)
+    if user["role"] == "ADMIN":
+        return query
+    if user["role"] == "INPUTTER":
+        return query.where(Organization.id == user["organization_id"])
+    if user.get("managed"):
+        current_org = user.get("organization") or {}
+        group_head_id = current_org.get("group_head_id")
+        group_name = current_org.get("group_name")
+        if group_head_id:
+            return query.where(Organization.group_head_id == group_head_id)
+        if group_name:
+            return query.where(Organization.group_name == group_name)
+        return query.where(Organization.id == user["organization_id"])
+    employee_id = user["employee_id"]
+    return query.where(
+        (Organization.group_head_id == employee_id)
+        | (Organization.team_head_id == employee_id)
+        | (Organization.division_head_id == employee_id)
+        | (Organization.part_head_id == employee_id)
+    )
+
+
 CSV_FIELD_MAP = {
     "실명": "division_name",
     "실장명": "division_head_name",
@@ -122,12 +146,13 @@ def _organization_from_csv_row(row: dict[str, str]) -> Organization:
 @router.get("")
 def list_organizations(
     db: Annotated[Session, Depends(get_db)],
+    user: Annotated[dict, Depends(get_current_user)],
     division: str | None = None,
     team: str | None = None,
     group: str | None = None,
     part: str | None = None,
 ):
-    query = select(Organization)
+    query = _scoped_organization_query(user)
     if division:
         query = query.where(Organization.division_name.contains(division))
     if team:

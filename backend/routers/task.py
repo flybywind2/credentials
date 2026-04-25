@@ -133,26 +133,15 @@ def _none_if_blank(value: str | None) -> str | None:
     return stripped or None
 
 
-def _same_group(user: dict, org: Organization | None) -> bool:
-    if org is None:
-        return False
-    user_org = user.get("organization") or {}
-    user_group_head_id = user_org.get("group_head_id")
-    if user_group_head_id and org.group_head_id == user_group_head_id:
-        return True
-    user_group_name = user_org.get("group_name")
-    return bool(user_group_name and org.group_name == user_group_name)
-
-
 def _ensure_can_read_task_org(user: dict, org_id: int | None, db: Session) -> None:
     if org_id is None or user["role"] == "ADMIN":
         return
     if user["organization_id"] == org_id:
         return
     org = db.get(Organization, org_id)
-    if user["role"] == "APPROVER" and _is_approver_subordinate(user, org):
+    if user["role"] == "APPROVER" and user.get("managed") and _same_assigned_group(user, org):
         return
-    if user["role"] == "INPUTTER" and _same_group(user, db.get(Organization, org_id)):
+    if user["role"] == "APPROVER" and _is_approver_subordinate(user, org):
         return
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -168,25 +157,36 @@ def _is_approver_subordinate(user: dict, org: Organization | None) -> bool:
     }
 
 
+def _same_assigned_group(user: dict, org: Organization | None) -> bool:
+    if org is None:
+        return False
+    user_org = user.get("organization") or {}
+    user_group_head_id = user_org.get("group_head_id")
+    if user_group_head_id:
+        return org.group_head_id == user_group_head_id
+    user_group_name = user_org.get("group_name")
+    return bool(user_group_name and org.group_name == user_group_name)
+
+
 def _readable_task_query(user: dict, db: Session):
     if user["role"] == "ADMIN":
         return select(TaskEntry)
     query = select(TaskEntry).join(Organization, Organization.id == TaskEntry.organization_id)
     if user["role"] == "APPROVER":
+        if user.get("managed"):
+            current_org = db.get(Organization, user["organization_id"])
+            if current_org and current_org.group_head_id:
+                return query.where(Organization.group_head_id == current_org.group_head_id)
+            if current_org and current_org.group_name:
+                return query.where(Organization.group_name == current_org.group_name)
+            return query.where(TaskEntry.organization_id == user["organization_id"])
         employee_id = user["employee_id"]
         return query.where(
             (Organization.group_head_id == employee_id)
             | (Organization.team_head_id == employee_id)
             | (Organization.division_head_id == employee_id)
         )
-    current_org = db.get(Organization, user["organization_id"])
-    if current_org is None:
-        return query.where(TaskEntry.organization_id == user["organization_id"])
-    if current_org.group_head_id:
-        return query.where(Organization.group_head_id == current_org.group_head_id)
-    if current_org.group_name:
-        return query.where(Organization.group_name == current_org.group_name)
-    return query.where(TaskEntry.organization_id == current_org.id)
+    return query.where(TaskEntry.organization_id == user["organization_id"])
 
 
 def _normalize_answers(answers: list[QuestionAnswerInput] | None) -> list[TaskQuestionAnswer]:
@@ -472,6 +472,8 @@ def list_same_group_tasks(
     user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    if user["role"] == "INPUTTER":
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     current_org = db.get(Organization, user["organization_id"])
     if current_org is None:
         return []

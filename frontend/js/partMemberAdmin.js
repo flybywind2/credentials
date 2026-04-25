@@ -24,9 +24,12 @@ function organizationLabel(org) {
 }
 
 function organizationOptions(organizations) {
-  return organizations.map((org) => `
-    <option value="${org.id}">${escapeHtml(organizationLabel(org))}</option>
-  `).join("");
+  return [
+    `<option value="__all__">전체 일괄 업로드</option>`,
+    ...organizations.map((org) => `
+      <option value="${org.id}">${escapeHtml(organizationLabel(org))}</option>
+    `),
+  ].join("");
 }
 
 function memberRows(members) {
@@ -45,7 +48,10 @@ function memberRows(members) {
 async function importPartMembers(orgId, file) {
   const formData = new FormData();
   formData.append("file", file);
-  const response = await fetch(`/api/part-members/import?org_id=${encodeURIComponent(orgId)}`, {
+  const url = orgId === "__all__"
+    ? "/api/part-members/import?scope=all"
+    : `/api/part-members/import?org_id=${encodeURIComponent(orgId)}`;
+  const response = await fetch(url, {
     method: "POST",
     headers: authHeaders(),
     body: formData,
@@ -57,6 +63,9 @@ async function importPartMembers(orgId, file) {
 }
 
 async function loadMembers(container, orgId) {
+  if (orgId === "__all__") {
+    return fetchJson("/api/part-members?scope=all");
+  }
   return fetchJson(`/api/part-members?org_id=${encodeURIComponent(orgId)}`);
 }
 
@@ -67,7 +76,7 @@ export async function renderPartMemberManager(container) {
       <div class="section-header part-member-header">
         <div>
           <h2>파트원 명단 CSV 업로드</h2>
-          <p>선택한 조직의 파트원 명단을 CSV로 교체합니다. CSV 헤더: 파트명, 이름, knox_id</p>
+          <p>대상 조직을 선택하거나 전체 일괄 업로드로 모든 파트원 명단을 CSV로 교체합니다. CSV 헤더: 파트명, 이름, knox_id</p>
         </div>
       </div>
       <div class="admin-import-box part-member-import-box">

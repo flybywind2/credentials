@@ -68,5 +68,11 @@ def resolve_current_user_from_request(
         )
 
     if token:
-        return _strip_token_claims(verify_access_token(token))
+        token_claims = _strip_token_claims(verify_access_token(token))
+        return resolve_app_user(
+            str(token_claims["employee_id"]),
+            db=db,
+            attributes=token_claims,
+            provider=token_claims.get("sso_provider"),
+        )
     raise HTTPException(status_code=401, detail="Authentication required")

@@ -30,7 +30,9 @@ def _target_org_id(user: dict, org_id: int | None) -> int:
 
 
 def _ensure_can_read_org(user: dict, db: Session, org_id: int) -> None:
-    if user["role"] == "ADMIN" or user["organization_id"] == org_id:
+    if user["role"] == "ADMIN":
+        return
+    if user["role"] == "INPUTTER" and user["organization_id"] == org_id:
         return
     org = db.get(Organization, org_id)
     if user["role"] == "APPROVER" and org is not None and user["employee_id"] in {
@@ -52,21 +54,56 @@ def _required_value(row: dict[str, str], header: str, row_number: int) -> str:
     return value
 
 
-def _members_from_csv(raw: bytes, organization_id: int) -> list[PartMember]:
+def _csv_rows(raw: bytes) -> list[tuple[int, str, str, str]]:
     text = raw.decode("utf-8-sig")
     reader = csv.DictReader(StringIO(text))
     if not reader.fieldnames or not CSV_HEADERS.issubset(set(reader.fieldnames)):
         raise HTTPException(status_code=400, detail="CSV 헤더는 파트명, 이름, knox_id가 필요합니다.")
 
-    members_by_key: dict[tuple[str, str], PartMember] = {}
+    rows = []
     for index, row in enumerate(reader, start=2):
         if not any((value or "").strip() for value in row.values()):
             continue
         part_name = _required_value(row, "파트명", index)
         name = _required_value(row, "이름", index)
         knox_id = _required_value(row, "knox_id", index)
+        rows.append((index, part_name, name, knox_id))
+    return rows
+
+
+def _members_from_csv(raw: bytes, organization_id: int) -> list[PartMember]:
+    members_by_key: dict[tuple[str, str], PartMember] = {}
+    for _, part_name, name, knox_id in _csv_rows(raw):
         members_by_key[(part_name, knox_id)] = PartMember(
             organization_id=organization_id,
+            part_name=part_name,
+            name=name,
+            knox_id=knox_id,
+        )
+    return list(members_by_key.values())
+
+
+def _members_from_csv_for_all(db: Session, raw: bytes) -> list[PartMember]:
+    organizations_by_part_name: dict[str, list[Organization]] = {}
+    for org in db.scalars(select(Organization)).all():
+        organizations_by_part_name.setdefault(org.part_name, []).append(org)
+
+    members_by_key: dict[tuple[int, str, str], PartMember] = {}
+    for row_number, part_name, name, knox_id in _csv_rows(raw):
+        organizations = organizations_by_part_name.get(part_name, [])
+        if not organizations:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{row_number}행의 파트명은 조직 정보에 없는 파트명입니다: {part_name}",
+            )
+        if len(organizations) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{row_number}행의 파트명이 중복되어 조직을 확정할 수 없습니다: {part_name}",
+            )
+        organization = organizations[0]
+        members_by_key[(organization.id, part_name, knox_id)] = PartMember(
+            organization_id=organization.id,
             part_name=part_name,
             name=name,
             knox_id=knox_id,
@@ -79,7 +116,15 @@ def list_part_members(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[dict, Depends(get_current_user)],
     org_id: int | None = None,
+    scope: str | None = None,
 ):
+    if scope == "all":
+        require_admin(user)
+        members = db.scalars(
+            select(PartMember)
+            .order_by(PartMember.organization_id, PartMember.part_name, PartMember.name, PartMember.knox_id)
+        ).all()
+        return [_serialize(member) for member in members]
     target_org_id = _target_org_id(user, org_id)
     _ensure_can_read_org(user, db, target_org_id)
     members = db.scalars(
@@ -96,15 +141,19 @@ async def import_part_members(
     user: Annotated[dict, Depends(get_current_user)],
     file: UploadFile = File(...),
     org_id: int | None = None,
+    scope: str | None = None,
 ):
     require_admin(user)
-    target_org_id = _target_org_id(user, org_id)
-    if db.get(Organization, target_org_id) is None:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
     raw = await file.read()
-    members = _members_from_csv(raw, target_org_id)
-    db.execute(delete(PartMember).where(PartMember.organization_id == target_org_id))
+    if scope == "all":
+        members = _members_from_csv_for_all(db, raw)
+        db.execute(delete(PartMember))
+    else:
+        target_org_id = _target_org_id(user, org_id)
+        if db.get(Organization, target_org_id) is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        members = _members_from_csv(raw, target_org_id)
+        db.execute(delete(PartMember).where(PartMember.organization_id == target_org_id))
     for member in members:
         db.add(member)
     db.commit()

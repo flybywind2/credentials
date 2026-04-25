@@ -10,10 +10,12 @@ test("admin dashboard mounts the part member manager", () => {
   assert.match(dashboardSource, /part-member-manager-root/);
 });
 
-test("part member manager owns CSV upload by organization", () => {
+test("part member manager supports selected organization and all-part CSV upload", () => {
   assert.match(partMemberAdminSource, /파트원 명단 CSV 업로드/);
   assert.match(partMemberAdminSource, /파트명, 이름, knox_id/);
   assert.match(partMemberAdminSource, /\/api\/part-members\/import\?org_id=/);
+  assert.match(partMemberAdminSource, /\/api\/part-members\/import\?scope=all/);
+  assert.match(partMemberAdminSource, /전체 일괄 업로드/);
   assert.match(partMemberAdminSource, /name="organization_id"/);
   assert.match(partMemberAdminSource, /type="file"/);
   assert.match(partMemberAdminSource, /text\/csv/);

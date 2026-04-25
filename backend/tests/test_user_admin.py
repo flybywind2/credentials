@@ -100,6 +100,70 @@ def test_admin_can_create_update_and_delete_user_permission():
     assert delete_response.status_code == 204
 
 
+def test_admin_user_org_update_changes_inputter_runtime_scope():
+    client = TestClient(app)
+    employee_id = _employee_id()
+    admin_headers = {"X-Employee-Id": "admin001"}
+    org_response = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "권한변경실",
+            "division_head_name": "권한변경실장",
+            "division_head_id": f"{employee_id}-div",
+            "team_name": "권한변경팀",
+            "team_head_name": "권한변경팀장",
+            "team_head_id": f"{employee_id}-team",
+            "group_name": "권한변경그룹",
+            "group_head_name": "권한변경그룹장",
+            "group_head_id": f"{employee_id}-group",
+            "part_name": "권한변경파트",
+            "part_head_name": "권한변경파트장",
+            "part_head_id": f"{employee_id}-part",
+            "org_type": "NORMAL",
+        },
+        headers=admin_headers,
+    )
+    assert org_response.status_code == 201
+    next_org_id = org_response.json()["id"]
+    create_response = client.post(
+        "/api/admin/users",
+        json={
+            "employee_id": employee_id,
+            "name": "권한조직변경",
+            "role": "INPUTTER",
+            "organization_id": 1,
+        },
+        headers=admin_headers,
+    )
+    assert create_response.status_code == 201
+
+    try:
+        update_response = client.put(
+            f"/api/admin/users/{employee_id}",
+            json={"organization_id": next_org_id},
+            headers=admin_headers,
+        )
+        me_response = client.get("/api/auth/me", headers={"X-Employee-Id": employee_id})
+        orgs_response = client.get("/api/organizations", headers={"X-Employee-Id": employee_id})
+        old_tasks_response = client.get("/api/tasks?org_id=1", headers={"X-Employee-Id": employee_id})
+        new_tasks_response = client.get(
+            f"/api/tasks?org_id={next_org_id}",
+            headers={"X-Employee-Id": employee_id},
+        )
+
+        assert update_response.status_code == 200
+        assert update_response.json()["organization_id"] == next_org_id
+        assert me_response.status_code == 200
+        assert me_response.json()["organization_id"] == next_org_id
+        assert orgs_response.status_code == 200
+        assert [item["id"] for item in orgs_response.json()] == [next_org_id]
+        assert old_tasks_response.status_code == 403
+        assert new_tasks_response.status_code == 200
+    finally:
+        client.delete(f"/api/admin/users/{employee_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{next_org_id}", headers=admin_headers)
+
+
 def test_inputter_cannot_manage_users():
     client = TestClient(app)
 

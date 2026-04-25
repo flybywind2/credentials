@@ -89,6 +89,7 @@ def _user_payload(
     organization: Organization | dict[str, Any] | None,
     attributes: dict[str, Any],
     provider: str | None,
+    managed: bool = False,
 ) -> dict[str, Any]:
     serialized_org = _serialize_org(organization)
     payload = {
@@ -98,6 +99,7 @@ def _user_payload(
         "role": role,
         "organization_id": serialized_org["id"] if serialized_org else None,
         "organization": serialized_org,
+        "managed": managed,
     }
     if provider:
         payload["sso_provider"] = provider
@@ -124,6 +126,7 @@ def _resolve_db_user(
         organization=organization,
         attributes=attributes,
         provider=provider,
+        managed=True,
     )
 
 

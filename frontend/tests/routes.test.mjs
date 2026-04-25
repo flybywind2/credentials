@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { availableRoutesForRole, routeFromPath, routePathForKey } from "../js/app.js";
 
 test("availableRoutesForRole limits inputters to input workflows", () => {
-  assert.deepEqual(availableRoutesForRole("INPUTTER").map((item) => item.key), ["inputter", "status", "group"]);
+  assert.deepEqual(availableRoutesForRole("INPUTTER").map((item) => item.key), ["inputter", "status"]);
 });
 
 test("availableRoutesForRole gives approvers all non-admin workspaces", () => {

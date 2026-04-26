@@ -6,6 +6,6 @@ services:
     environment:
       DATABASE_URL: sqlite:///./dev.db
       SSO_MODE: mock
-      SMTP_MODE: disabled
+      MAIL_MODE: disabled
     ports:
       - "8000:8000"

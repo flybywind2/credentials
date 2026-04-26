@@ -37,4 +37,4 @@ Pull requests should include a short summary, linked issue or request, changed r
 
 ## Security & Configuration Tips
 
-Do not commit real employee IDs, SSO secrets, SMTP credentials, database passwords, or production exports. Keep environment-specific values in local environment files or secret storage, and provide sanitized examples only.
+Do not commit real employee IDs, SSO secrets, mail API credentials, database passwords, or production exports. Keep environment-specific values in local environment files or secret storage, and provide sanitized examples only.

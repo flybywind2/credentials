@@ -53,11 +53,13 @@ def resolve_current_user_from_request(
     x_employee_id: str | None,
 ) -> dict:
     mode = settings.sso_mode.lower()
-    token = _bearer_token(authorization) or _cookie_token(request)
+    bearer_token = _bearer_token(authorization)
+    cookie_token = _cookie_token(request)
 
     if mode == "mock":
         if x_employee_id:
             return resolve_app_user(x_employee_id.strip(), db=db, provider="mock")
+        token = cookie_token or bearer_token
         if token:
             return _strip_token_claims(verify_access_token(token))
         return resolve_app_user("admin001", db=db, provider="mock")
@@ -73,6 +75,7 @@ def resolve_current_user_from_request(
             provider="broker",
         )
 
+    token = bearer_token or cookie_token
     if token:
         token_claims = _strip_token_claims(verify_access_token(token))
         return resolve_app_user(

@@ -15,6 +15,7 @@ import {
 
 const spreadsheetSource = readFileSync(new URL("../js/spreadsheet.js", import.meta.url), "utf8");
 const formSource = readFileSync(new URL("../js/form.js", import.meta.url), "utf8");
+const partMembersSource = readFileSync(new URL("../js/partMembers.js", import.meta.url), "utf8");
 
 test("groupValidationErrors groups backend cell errors by row", () => {
   const grouped = groupValidationErrors([
@@ -37,7 +38,8 @@ test("spreadsheet source includes approval confirmation and excel preview flow",
   assert.match(spreadsheetSource, /\/api\/organizations/);
   assert.match(spreadsheetSource, /\/api\/tasks\/import\/preview/);
   assert.match(spreadsheetSource, /\/api\/tasks\/bulk/);
-  assert.match(spreadsheetSource, /\/api\/part-members\?org_id=/);
+  assert.match(spreadsheetSource, /loadReadablePartMembers\(fetchJson, orgId\)/);
+  assert.match(partMembersSource, /\/api\/part-members/);
   assert.match(spreadsheetSource, /data-action="select-work-org"/);
   assert.match(spreadsheetSource, /담당자/);
   assert.match(formSource, /assignee_knox_ids/);

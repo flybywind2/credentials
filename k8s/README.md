@@ -41,20 +41,17 @@ namespace를 먼저 만든다.
 kubectl apply -f k8s/namespace.yaml
 ```
 
-외부 MySQL, SSO, 사내 메일 API를 사용하는 운영 배포는 secret을 만든다.
+외부 MySQL, broker SSO, 사내 메일 API를 사용하는 운영 배포는 secret을 만든다.
 
 ```powershell
 kubectl -n credential create secret generic credential-secrets `
   --from-literal=DATABASE_URL="mysql+pymysql://credential_user:change-me@mysql.internal:3306/credential?charset=utf8mb4" `
-  --from-literal=SSO_PROVIDER_URL="ldap://ad.example.internal:389" `
   --from-literal=SSO_TOKEN_SECRET="change-me-to-random-32-byte-secret" `
-  --from-literal=SSO_LDAP_BIND_DN_TEMPLATE="{employee_id}@example.internal" `
-  --from-literal=SSO_LDAP_SEARCH_BASE="OU=Users,DC=example,DC=internal" `
   --from-literal=MAIL_API_BASE_URL="mail.net" `
   --from-literal=MAIL_API_SYSTEM_ID="credential-system"
 ```
 
-개발 smoke test 목적이면 secret 없이도 컨테이너 이미지의 기본 `sqlite:///./dev.db`, `SSO_MODE=mock`, `SMTP_MODE=disabled` 값으로 기동할 수 있다. 단, 이 경우 DB는 pod 수명에 종속되므로 운영 데이터에는 사용할 수 없다.
+개발 smoke test 목적이면 secret 없이도 컨테이너 이미지의 기본 `sqlite:///./dev.db`, `SSO_MODE=mock`, `MAIL_MODE=disabled` 값으로 기동할 수 있다. 단, 이 경우 DB는 pod 수명에 종속되므로 운영 데이터에는 사용할 수 없다.
 
 ## Configure Runtime Mode
 
@@ -64,12 +61,8 @@ kubectl -n credential create secret generic credential-secrets `
 data:
   APP_BASE_URL: "http://127.0.0.1:8000"
   SSO_MODE: "mock"
-  SMTP_MODE: "disabled"
-  SMTP_PORT: "587"
+  MAIL_MODE: "disabled"
   MAIL_API_BASE_URL: "mail.net"
-  MAIL_API_DOC_SECU_TYPE: "PERSONAL"
-  MAIL_API_CONTENT_TYPE: "HTML"
-  MAIL_API_PAYLOAD_FORMAT: "json"
 ```
 
 운영 broker 연동 예시:
@@ -81,26 +74,14 @@ data:
   SSO_BROKER_EMPLOYEE_HEADER: "X-Broker-Employee-Id"
   SSO_BROKER_NAME_HEADER: "X-Broker-Display-Name"
   SSO_BROKER_EMAIL_HEADER: "X-Broker-Email"
-  SMTP_MODE: "mail_api"
+  SSO_BROKER_DEPT_HEADER: "deptname"
+  MAIL_MODE: "mail_api"
   MAIL_API_BASE_URL: "mail.net"
 ```
 
 Broker/ingress 계층은 외부 요청의 `X-Broker-*` 헤더를 삭제한 뒤 인증된 요청에만 내부 헤더를 재주입해야 한다.
 
-운영 LDAP 연동 예시:
-
-```yaml
-data:
-  APP_BASE_URL: "https://credential.example.internal"
-  SSO_MODE: "ldap"
-  SMTP_MODE: "mail_api"
-  MAIL_API_BASE_URL: "mail.net"
-  MAIL_API_DOC_SECU_TYPE: "PERSONAL"
-  MAIL_API_CONTENT_TYPE: "HTML"
-  MAIL_API_PAYLOAD_FORMAT: "json"
-```
-
-`SSO_MODE=broker`이면 `SSO_BROKER_EMPLOYEE_HEADER` 값이 필요하다. `SSO_MODE=ldap`이면 `SSO_PROVIDER_URL`, `SSO_TOKEN_SECRET`, `SSO_LDAP_BIND_DN_TEMPLATE` secret 값이 필요하다. `SSO_MODE=saml`이면 ACS URL, SP entity id, IdP entity id, SSO URL, IdP 인증서, token secret이 필요하다. `SMTP_MODE=mail_api`이면 `MAIL_API_BASE_URL` 값이 필요하고, `MAIL_API_SYSTEM_ID`는 필요한 경우 header `System-ID`로 전달한다.
+`SSO_MODE=broker`이면 `SSO_BROKER_EMPLOYEE_HEADER` 값이 필요하다. `MAIL_MODE=mail_api`이면 `MAIL_API_BASE_URL` 값이 필요하고, `MAIL_API_SYSTEM_ID`는 필요한 경우 header `System-ID`로 전달한다.
 
 ## Deploy
 
@@ -166,8 +147,8 @@ kubectl -n credential delete secret credential-secrets
 
 ## Operational Notes
 
-- Broker/LDAP/SAML 인증 코드는 구현되어 있다. 운영 전 사내 broker/IdP URL, 인증서, bind DN, 사용자 속성명, 방화벽/DNS를 실제 클러스터에서 검증한다.
+- Broker 인증 코드는 구현되어 있다. 운영 전 사내 broker header 주입, header 제거 정책, 방화벽/DNS를 실제 클러스터에서 검증한다.
 - 운영에서는 외부 MySQL을 사용하고 `DATABASE_URL`을 secret으로 주입한다.
 - 운영에서 mock 모드와 외부에서 주입 가능한 `X-Employee-Id` header fallback을 사용하지 않는다. Broker 모드는 ingress에서 외부 `X-Broker-*` 헤더를 제거해야 한다.
 - Docker image는 immutable tag를 사용하고, `latest`는 개발/검증 용도로만 사용한다.
-- `secret.example.yaml`의 값은 예시이므로 실제 비밀번호나 client secret으로 교체한 파일을 커밋하지 않는다.
+- `secret.example.yaml`의 값은 예시이므로 실제 비밀번호나 secret 값으로 교체한 파일을 커밋하지 않는다.

@@ -4,7 +4,7 @@
 
 **Goal:** Add a `mail_api` delivery mode that sends approval email through the company mail API.
 
-**Architecture:** Keep `EmailService` as the delivery boundary. `get_email_service()` selects `DisabledEmailService`, `SmtpEmailService`, or `MailApiEmailService` based on `SMTP_MODE`. The mail API sender maps `EmailMessage` into the company request contract and posts through `httpx`.
+**Architecture:** Keep `EmailService` as the delivery boundary. `get_email_service()` selects `DisabledEmailService` or `MailApiEmailService` based on `MAIL_MODE`. The mail API sender maps `EmailMessage` into the company request contract and posts through `httpx`.
 
 **Tech Stack:** FastAPI, Python 3.10, dataclass settings, `httpx`, pytest.
 
@@ -22,7 +22,7 @@ Add tests that expect:
 - JSON mode includes `subject`, `docSecuType`, `contents`, `contentType`, and `recipients`.
 - Optional `MAIL_API_SYSTEM_ID` is sent as request header `System-ID`.
 - Form mode sends `data` instead of `json`.
-- Runtime validation requires mail API settings when `SMTP_MODE=mail_api`.
+- Runtime validation requires mail API settings when `MAIL_MODE=mail_api`.
 
 **Step 2: Run RED**
 
@@ -51,7 +51,7 @@ Create `MailApiEmailService` using `httpx.post()`, map message fields to the int
 
 **Step 3: Select mode**
 
-Return `MailApiEmailService` from `get_email_service()` when `SMTP_MODE=mail_api`.
+Return `MailApiEmailService` from `get_email_service()` when `MAIL_MODE=mail_api`.
 
 **Step 4: Run GREEN**
 
@@ -75,7 +75,7 @@ Expected: all tests pass.
 
 **Step 1: Document variables**
 
-Add `MAIL_API_*` examples and explain `SMTP_MODE=mail_api`.
+Add `MAIL_API_*` examples and explain `MAIL_MODE=mail_api`.
 
 **Step 2: Run full verification**
 

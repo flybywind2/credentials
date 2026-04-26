@@ -220,18 +220,25 @@ function renderLogin(view, userSummary) {
     const password = event.currentTarget.elements.password.value;
     const error = view.querySelector("[data-login-error]");
     error.textContent = "";
+    let user;
     try {
-      const user = await loginWithEmployeeId(employeeId, password);
-      renderAuthenticatedSummary(userSummary, user, view);
-      bindPopstate(user.role, view);
-      const nextRoute = routeFromPath(window.location.pathname);
-      await navigate(nextRoute.key, user.role, view, { params: nextRoute.params, replace: true });
+      user = await loginWithEmployeeId(employeeId, password);
     } catch (loginError) {
-      clearEmployeeId();
+      await logoutCurrentUser();
       if (isOrgMappingRequired(loginError)) {
         showOrgMappingRequiredModal(loginError);
       }
       error.textContent = loginError.message;
+      return;
+    }
+
+    renderAuthenticatedSummary(userSummary, user, view);
+    bindPopstate(user.role, view);
+    const nextRoute = routeFromPath(window.location.pathname);
+    try {
+      await navigate(nextRoute.key, user.role, view, { params: nextRoute.params, replace: true });
+    } catch (routeError) {
+      view.innerHTML = `<p class="error">${escapeHtml(routeError.message)}</p>`;
     }
   });
 }

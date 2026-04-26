@@ -4,7 +4,7 @@
 
 **Goal:** Build an MVP scaffold where FastAPI serves both JSON APIs and the vanilla JavaScript frontend from one port.
 
-**Architecture:** FastAPI owns `/api/*` routes and serves `frontend/index.html` plus static assets for all browser routes. SQLAlchemy uses SQLite locally through `DATABASE_URL`, with service modules isolating classification and approval logic for later MySQL/SSO/SMTP integration.
+**Architecture:** FastAPI owns `/api/*` routes and serves `frontend/index.html` plus static assets for all browser routes. SQLAlchemy uses SQLite locally through `DATABASE_URL`, with service modules isolating classification and approval logic for later MySQL, broker SSO, and mail API integration.
 
 **Tech Stack:** Python, FastAPI, SQLAlchemy, Pydantic, pytest, SQLite, vanilla JavaScript, CSS, Docker.
 
@@ -313,7 +313,7 @@ Create a Python container that installs `backend/requirements.txt`, copies `back
 
 **Step 2: Add environment example**
 
-Include `DATABASE_URL=sqlite:///./dev.db` and placeholders for SSO/SMTP variables.
+Include `DATABASE_URL=sqlite:///./dev.db` and placeholders for SSO and mail variables.
 
 **Step 3: Update contributor guide**
 

@@ -1,5 +1,6 @@
 import { fetchJson } from "./api.js?v=20260426-mock-cookie";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
+import { loadReadablePartMembers } from "./partMembers.js?v=20260426-mock-cookie";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -35,7 +36,7 @@ export async function renderPartStatus(container) {
     fetchJson("/api/settings/deadline"),
     fetchJson("/api/tasks/status"),
     fetchJson("/api/tasks/rejection"),
-    fetchJson("/api/part-members"),
+    loadReadablePartMembers(fetchJson),
   ]);
   const org = currentUser.organization || {};
   container.innerHTML = `

@@ -10,8 +10,8 @@
 | Frontend | Vanilla JavaScript | 프레임워크 미사용, 순수 JS |
 | Database (Production) | MySQL | 사내 프라이빗 클라우드 |
 | Database (Test) | SQLite | 로컬 개발/테스트 환경 |
-| 인증 | AD SSO (LDAP/SAML) | 사내 Active Directory 연동 |
-| 이메일 | SMTP | 사내 SMTP 서버, {ID}@samsung.com |
+| 인증 | SSO broker / mock | 운영은 사내 SSO broker, 개발은 mock |
+| 이메일 | Mail API | 사내 메일 라우터, {ID}@samsung.com |
 | 배포 | 사내 프라이빗 클라우드 | Docker 컨테이너 기반 권장 |
 
 ### 1.2 아키텍처 다이어그램
@@ -21,8 +21,8 @@
         ↕ HTTPS
 [FastAPI 서버 (REST API)]
     ↕           ↕           ↕
-[MySQL DB]  [AD SSO]   [SMTP 서버]
-                        ({ID}@samsung.com)
+[MySQL DB]  [SSO Broker]   [Mail API]
+                            ({ID}@samsung.com)
 ```
 
 ### 1.3 프로젝트 구조
@@ -31,7 +31,7 @@
 project-root/
 ├── backend/
 │   ├── main.py                  # FastAPI 앱 진입점
-│   ├── config.py                # 환경 설정 (DB, SMTP, SSO 등)
+│   ├── config.py                # 환경 설정 (DB, Mail API, SSO 등)
 │   ├── database.py              # DB 연결 및 세션 관리
 │   ├── models/                  # SQLAlchemy ORM 모델
 │   │   ├── organization.py      # 조직 구조 모델
@@ -284,7 +284,7 @@ project-root/
 
 ### 4.1 SSO 연동 【변경】
 
-사내 AD SSO와 LDAP 또는 SAML 2.0 프로토콜로 연동한다. SSO 인증 성공 시 사번ID를 기준으로 사용자를 식별하고, organizations 테이블의 사번ID 매칭을 통해 역할과 소속 조직을 자동 매핑한다. JWT 토큰을 발급하며, API 요청 시 Authorization 헤더에 포함하여 전송한다. 이메일은 `{사번ID}@samsung.com`으로 자동 구성한다.
+운영 환경에서는 사내 SSO broker/reverse proxy가 인증된 사용자 header를 주입하고, 앱은 사번ID를 기준으로 사용자를 식별한다. 개발 환경에서는 mock 로그인을 사용한다. organizations 테이블의 사번ID 매칭을 통해 역할과 소속 조직을 자동 매핑한다. 이메일은 `{사번ID}@samsung.com`으로 자동 구성한다.
 
 ### 4.2 권한 제어
 

@@ -3,6 +3,7 @@ import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { openTaskModal } from "./form.js?v=20260425-form-comments";
+import { loadReadablePartMembers } from "./partMembers.js?v=20260426-mock-cookie";
 import { tooltipMap } from "./tooltipAdmin.js?v=20260421-p1b";
 
 function badge(label, tone) {
@@ -768,7 +769,7 @@ export async function renderSpreadsheet(container, options = {}) {
     fetchJson("/api/settings/deadline"),
     fetchJson(`/api/tasks/rejection?org_id=${orgId}`),
     fetchJson(`/api/tasks/status?org_id=${orgId}`),
-    fetchJson(`/api/part-members?org_id=${orgId}`),
+    loadReadablePartMembers(fetchJson, orgId),
   ]);
   const tooltips = tooltipMap(tooltipRows);
   const currentPartName = selectedOrganization.part_name || "";

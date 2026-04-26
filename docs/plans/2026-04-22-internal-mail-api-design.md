@@ -1,14 +1,14 @@
 # Internal Mail API Design
 
-**Goal:** Send approval notification emails through the company mail API instead of relying only on SMTP.
+**Goal:** Send approval notification emails through the company mail API.
 
 ## Approach
 
-Keep the existing `EmailService` boundary and add a third mode, `mail_api`, alongside `disabled` and `smtp`. Approval code continues to call `_notify()` with `EmailMessage`; only the delivery implementation changes.
+Keep the existing `EmailService` boundary and support `mail_api` alongside `disabled`. Approval code continues to call `_notify()` with `EmailMessage`; only the delivery implementation changes.
 
 ## Configuration
 
-`SMTP_MODE=mail_api` selects the company API sender. The service reads `MAIL_API_BASE_URL`, optional `MAIL_API_SYSTEM_ID`, document security type, content type, timeout, and payload format from environment variables. This preserves the current deployment style and keeps environment-specific values outside source control.
+`MAIL_MODE=mail_api` selects the company API sender. The service reads `MAIL_API_BASE_URL`, optional `MAIL_API_SYSTEM_ID`, timeout, and payload format from environment variables. This preserves the current deployment style and keeps environment-specific values outside source control.
 
 ## Request Shape
 
@@ -28,4 +28,4 @@ The service calls `raise_for_status()` on the API response. Existing approval no
 
 ## Testing
 
-Add tests for `/send_mail` URL mapping, JSON payload mapping, form payload mapping, service selection, and runtime environment validation. Existing SMTP and disabled-mode tests remain unchanged.
+Add tests for `/send_mail` URL mapping, JSON payload mapping, service selection, and runtime environment validation. Existing disabled-mode tests remain unchanged.

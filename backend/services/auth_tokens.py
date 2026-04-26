@@ -23,7 +23,7 @@ def _now_utc(now: datetime | None = None) -> datetime:
 
 
 def _token_secret(secret: str | None = None) -> str:
-    return secret or settings.sso_token_secret or settings.sso_client_secret or DEFAULT_TOKEN_SECRET
+    return secret or settings.sso_token_secret or DEFAULT_TOKEN_SECRET
 
 
 def _encode_json(value: dict[str, Any]) -> str:

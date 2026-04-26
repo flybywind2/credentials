@@ -21,10 +21,18 @@ def test_disabled_email_service_records_message_without_sending():
     assert service.sent_messages[0].subject == "승인 요청"
 
 
-def test_environment_validation_requires_smtp_settings_when_enabled():
-    settings = Settings(smtp_mode="smtp", smtp_host="", smtp_username="", smtp_password="")
+def test_environment_validation_rejects_removed_smtp_mode():
+    settings = Settings(mail_mode="smtp")
 
-    with pytest.raises(ValueError, match="SMTP_HOST"):
+    with pytest.raises(ValueError, match="MAIL_MODE"):
+        validate_runtime_settings(settings)
+
+
+@pytest.mark.parametrize("mode", ["ldap", "saml"])
+def test_environment_validation_rejects_removed_sso_modes(mode):
+    settings = Settings(sso_mode=mode)
+
+    with pytest.raises(ValueError, match="SSO_MODE"):
         validate_runtime_settings(settings)
 
 
@@ -53,7 +61,7 @@ def test_mail_api_email_service_posts_send_mail_payload(monkeypatch):
         return Response()
 
     monkeypatch.setattr(email_module, "settings", Settings(
-        smtp_mode="mail_api",
+        mail_mode="mail_api",
         mail_api_base_url="mail.net",
         mail_api_timeout_seconds=7,
     ))
@@ -97,7 +105,7 @@ def test_mail_api_email_service_uses_text_body_when_html_is_missing(monkeypatch)
         return Response()
 
     monkeypatch.setattr(email_module, "settings", Settings(
-        smtp_mode="mail_api",
+        mail_mode="mail_api",
         mail_api_base_url="https://mail.net/send_mail",
     ))
     monkeypatch.setattr(email_module.httpx, "post", fake_post)
@@ -123,7 +131,7 @@ def test_mail_api_email_service_uses_text_body_when_html_is_missing(monkeypatch)
 
 def test_mail_api_mode_selects_mail_api_service(monkeypatch):
     monkeypatch.setattr(email_module, "settings", Settings(
-        smtp_mode="mail_api",
+        mail_mode="mail_api",
         mail_api_base_url="mail.net",
     ))
 
@@ -132,7 +140,7 @@ def test_mail_api_mode_selects_mail_api_service(monkeypatch):
 
 def test_environment_validation_requires_mail_api_settings_when_enabled():
     settings = Settings(
-        smtp_mode="mail_api",
+        mail_mode="mail_api",
         mail_api_base_url="",
     )
 

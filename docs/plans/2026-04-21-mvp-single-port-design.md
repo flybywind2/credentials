@@ -39,7 +39,7 @@ The backend will expose initial route groups for:
 - Approvals
 - Dashboard
 
-AD SSO and SMTP will be stubbed in the MVP. The code should keep clear service boundaries so real SSO and email integration can replace the stubs later.
+Mock SSO and disabled mail delivery will be used in the MVP. The code should keep clear service boundaries so broker SSO and mail API integration can replace the local defaults later.
 
 ## Frontend Design
 
@@ -78,8 +78,8 @@ Use `pytest` with SQLite. Initial tests should cover:
 
 The MVP will include UI/API placeholders but defer full implementations for:
 
-- Real AD SSO integration
-- Real SMTP delivery
+- Real broker SSO integration
+- Real mail API delivery
 - Excel import/export file generation
 - Production MySQL deployment tuning
 

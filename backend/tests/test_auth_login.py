@@ -90,6 +90,23 @@ def test_mock_me_uses_employee_id_header_when_bearer_token_is_for_another_user()
     assert body["role"] == "APPROVER"
 
 
+def test_mock_me_prefers_login_cookie_over_stale_bearer_token():
+    client = TestClient(app)
+    stale_login_response = client.post("/api/auth/login", json={"employee_id": "part001"})
+    stale_token = stale_login_response.json()["access_token"]
+    client.post("/api/auth/login", json={"employee_id": "group001"})
+
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {stale_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["employee_id"] == "group001"
+    assert body["role"] == "APPROVER"
+
+
 def test_token_me_refreshes_managed_user_from_database_after_org_change(monkeypatch):
     client = TestClient(app)
     employee_id = f"token-org{uuid4().hex[:8]}"
@@ -411,25 +428,9 @@ def test_login_prefers_part_head_org_when_approver_also_heads_a_part():
             )
 
 
-def test_saml_acs_issues_token_for_valid_assertion(monkeypatch):
-    from backend.routers import auth as auth_router
-    from backend.services.sso import AuthenticatedIdentity
-
-    class FakeAdapter:
-        def authenticate_response(self, saml_response):
-            assert saml_response == "valid-saml"
-            return AuthenticatedIdentity(
-                employee_id="group001",
-                provider="saml",
-                attributes={"displayName": "박그룹장"},
-            )
-
-    monkeypatch.setattr(auth_router, "get_sso_adapter", lambda: FakeAdapter())
+def test_saml_acs_endpoint_is_removed():
     client = TestClient(app)
 
     response = client.post("/api/auth/saml/acs", data={"SAMLResponse": "valid-saml"})
 
-    assert response.status_code == 200
-    body = response.json()
-    assert verify_access_token(body["access_token"])["employee_id"] == "group001"
-    assert body["user"]["role"] == "APPROVER"
+    assert response.status_code == 404

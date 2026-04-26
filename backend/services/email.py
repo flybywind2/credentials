@@ -1,15 +1,10 @@
 from dataclasses import dataclass
 import html
-import logging
-from email.message import EmailMessage as SmtpMessage
 from typing import Protocol
-import smtplib
 
 import httpx
 
 from backend.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -32,31 +27,6 @@ class DisabledEmailService:
     def send(self, message: EmailMessage) -> dict:
         self.sent_messages.append(message)
         return {"status": "disabled", "recipients": message.recipients}
-
-
-class SmtpEmailService:
-    def send(self, message: EmailMessage) -> dict:
-        smtp_message = SmtpMessage()
-        smtp_message["Subject"] = message.subject
-        smtp_message["From"] = settings.smtp_username
-        smtp_message["To"] = ", ".join(message.recipients)
-        smtp_message.set_content(message.body)
-        if message.html_body:
-            smtp_message.add_alternative(message.html_body, subtype="html")
-        try:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
-                client.starttls()
-                if settings.smtp_username:
-                    client.login(settings.smtp_username, settings.smtp_password)
-                client.send_message(smtp_message)
-            return {"status": "sent", "recipients": message.recipients}
-        except Exception:
-            logger.exception(
-                "smtp email send failed subject=%s recipients=%s",
-                message.subject,
-                ",".join(message.recipients),
-            )
-            raise
 
 
 class MailApiEmailService:
@@ -94,9 +64,7 @@ class MailApiEmailService:
 
 
 def get_email_service() -> EmailService:
-    mode = settings.smtp_mode.lower()
-    if mode == "smtp":
-        return SmtpEmailService()
+    mode = settings.mail_mode.lower()
     if mode == "mail_api":
         return MailApiEmailService()
     return DisabledEmailService()

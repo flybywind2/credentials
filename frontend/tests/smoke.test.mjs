@@ -32,6 +32,7 @@ test("app module renders a logout action that clears saved authentication", () =
 
   assert.match(source, /data-action", "logout"/);
   assert.match(source, /로그아웃/);
-  assert.match(source, /clearEmployeeId\(\)/);
+  assert.match(source, /logoutCurrentUser\(\)/);
+  assert.doesNotMatch(source, /clearEmployeeId\(\)/);
   assert.match(source, /renderLogin\(view, userSummary\)/);
 });

@@ -22,7 +22,7 @@
 - 승인 요청, 승인, 반려, 수정 요청, 관리자 설정 변경은 감사 대상 이벤트로 분류한다.
 - 감사 로그 필드는 `event`, `employee_id`, `role`, `organization_id`, `resource_id`, `status`, `created_at`을 기본으로 한다.
 - 로그는 최소 1년 보관하며, 운영 환경에서는 중앙 로그 저장소로 전송한다.
-- 개인정보와 SSO secret, SMTP password, 사내 메일 API 식별자, DB password는 로그에 기록하지 않는다.
+- 개인정보와 SSO secret, 사내 메일 API 식별자, DB password는 로그에 기록하지 않는다.
 
 ## 일회성 취합 운영
 

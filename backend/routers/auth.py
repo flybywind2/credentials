@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -33,30 +33,6 @@ def _set_auth_cookie(response: Response, access_token: str) -> None:
 @router.post("/login")
 def login(request: LoginRequest, response: Response, db: Annotated[Session, Depends(get_db)]):
     identity = get_sso_adapter().authenticate(request.employee_id, password=request.password)
-    user = resolve_app_user(
-        identity.employee_id,
-        db=db,
-        attributes=identity.attributes,
-        provider=identity.provider,
-    )
-    log_audit(db, action="LOGIN", user=user, target_type="User", target_id=user["employee_id"])
-    db.commit()
-    access_token = create_access_token(user)
-    _set_auth_cookie(response, access_token)
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user,
-    }
-
-
-@router.post("/saml/acs")
-def saml_acs(
-    db: Annotated[Session, Depends(get_db)],
-    response: Response,
-    saml_response: Annotated[str, Form(alias="SAMLResponse")],
-):
-    identity = get_sso_adapter().authenticate_response(saml_response)
     user = resolve_app_user(
         identity.employee_id,
         db=db,

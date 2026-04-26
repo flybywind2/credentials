@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.dependencies import get_current_user, require_admin
 from backend.models import Organization, PartMember
+from backend.services.approver_scope import org_matches_user_scope
 
 router = APIRouter(prefix="/part-members", tags=["part-members"])
 
@@ -29,24 +30,8 @@ def _target_org_id(user: dict, org_id: int | None) -> int:
     return org_id or user["organization_id"]
 
 
-def _same_scope(user_org: dict, org: Organization, id_field: str, name_field: str) -> bool:
-    scope_id = user_org.get(id_field)
-    scope_name = user_org.get(name_field)
-    org_id = getattr(org, id_field)
-    org_name = getattr(org, name_field)
-    return bool(scope_id and scope_name and org_id == scope_id and org_name == scope_name)
-
-
 def _is_actual_approver_scope(user: dict, org: Organization) -> bool:
-    employee_id = user["employee_id"]
-    current_org = user.get("organization") or {}
-    if current_org.get("group_head_id") == employee_id:
-        return _same_scope(current_org, org, "group_head_id", "group_name")
-    if current_org.get("team_head_id") == employee_id:
-        return _same_scope(current_org, org, "team_head_id", "team_name")
-    if current_org.get("division_head_id") == employee_id:
-        return _same_scope(current_org, org, "division_head_id", "division_name")
-    return False
+    return org_matches_user_scope(user, org, allow_managed_default=False)
 
 
 def _ensure_can_read_org(user: dict, db: Session, org_id: int) -> None:

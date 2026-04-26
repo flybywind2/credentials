@@ -14,6 +14,13 @@ from backend.dependencies import ensure_can_write_org, get_current_user, require
 from backend.models import ApprovalRequest, ApprovalStep, ApprovalTaskReview, Organization, TaskEntry, User
 from backend.routers.organization import _scoped_organization_query
 from backend.services.audit import log_audit
+from backend.services.approver_scope import (
+    approval_role_for_level,
+    approver_level_for_user,
+    org_matches_user_scope,
+    status_scope_label_for_user,
+    status_unit_for_org,
+)
 from backend.services.approval_flow import build_approval_path
 from backend.services.collection import ensure_collection_open
 from backend.services.email import EmailMessage, build_approval_email_html, employee_email, get_email_service
@@ -171,39 +178,11 @@ def _serialize_task_reviews(db: Session, approval_request_id: int) -> list[dict]
 
 
 def _unit_for_status(user: dict, org: Organization) -> tuple[str, str, str]:
-    current_org = user.get("organization") or {}
-    employee_id = user["employee_id"]
-    if user["role"] == "ADMIN":
-        return "PART", f"part:{org.id}", org.part_name
-    if current_org.get("group_head_id") == employee_id:
-        return "PART", f"part:{org.id}", org.part_name
-    if current_org.get("team_head_id") == employee_id:
-        if org.group_name:
-            return "GROUP", f"group:{org.team_name}:{org.group_name}", org.group_name
-        return "PART", f"part:{org.id}", org.part_name
-    if current_org.get("division_head_id") == employee_id:
-        if org.team_name:
-            return "TEAM", f"team:{org.division_name}:{org.team_name}", org.team_name
-        return "PART", f"part:{org.id}", org.part_name
-    if user.get("managed"):
-        return "PART", f"part:{org.id}", org.part_name
-    return "PART", f"part:{org.id}", org.part_name
+    return status_unit_for_org(user, org)
 
 
 def _scope_label_for_status(user: dict) -> str:
-    current_org = user.get("organization") or {}
-    employee_id = user["employee_id"]
-    if user["role"] == "ADMIN":
-        return "전체현황"
-    if current_org.get("group_head_id") == employee_id:
-        return "파트현황"
-    if current_org.get("team_head_id") == employee_id:
-        return "그룹현황"
-    if current_org.get("division_head_id") == employee_id:
-        return "실현황"
-    if user.get("managed"):
-        return "파트현황"
-    return "하위 조직 현황"
+    return status_scope_label_for_user(user)
 
 
 def _latest_requests_by_org(db: Session, organization_ids: list[int]) -> dict[int, ApprovalRequest]:
@@ -270,53 +249,14 @@ def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
     }
 
 
-def _same_scope_values(scope_id: str | None, scope_name: str | None, org_id: str | None, org_name: str | None) -> bool:
-    return bool(scope_id and scope_name and org_id == scope_id and org_name == scope_name)
-
-
-def _approval_role_for_user(user: dict) -> str | None:
-    current_org = user.get("organization") or {}
-    employee_id = user["employee_id"]
-    if current_org.get("group_head_id") == employee_id:
-        return "그룹장"
-    if current_org.get("team_head_id") == employee_id:
-        return "팀장"
-    if current_org.get("division_head_id") == employee_id:
-        return "실장"
-    if user.get("managed"):
-        return "그룹장"
-    return None
-
-
 def _matches_step_scope(user: dict, org: Organization | None, step: ApprovalStep) -> bool:
     if org is None:
         return False
-    current_org = user.get("organization") or {}
-    role = _approval_role_for_user(user)
+    level = approver_level_for_user(user)
+    role = approval_role_for_level(level)
     if role != step.approver_role:
         return False
-    if role == "그룹장":
-        return _same_scope_values(
-            current_org.get("group_head_id"),
-            current_org.get("group_name"),
-            org.group_head_id,
-            org.group_name,
-        )
-    if role == "팀장":
-        return _same_scope_values(
-            current_org.get("team_head_id"),
-            current_org.get("team_name"),
-            org.team_head_id,
-            org.team_name,
-        )
-    if role == "실장":
-        return _same_scope_values(
-            current_org.get("division_head_id"),
-            current_org.get("division_name"),
-            org.division_head_id,
-            org.division_name,
-        )
-    return False
+    return org_matches_user_scope(user, org, level)
 
 
 def _can_act_on_step(user: dict, request: ApprovalRequest, step: ApprovalStep, db: Session) -> bool:
@@ -495,17 +435,6 @@ def _ensure_can_cancel(user: dict, request: ApprovalRequest, db: Session) -> Non
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 
-def _approval_has_started(db: Session, request: ApprovalRequest) -> bool:
-    return db.scalar(
-        select(func.count(ApprovalStep.id))
-        .where(ApprovalStep.approval_request_id == request.id)
-        .where(
-            (ApprovalStep.status != "PENDING")
-            | (ApprovalStep.acted_at.is_not(None))
-        )
-    ) > 0
-
-
 def _has_other_active_request(db: Session, request: ApprovalRequest) -> bool:
     return db.scalar(
         select(func.count(ApprovalRequest.id))
@@ -660,15 +589,14 @@ def cancel_request(
     if request.status != "PENDING":
         raise HTTPException(status_code=400, detail="Approval request is not pending")
     _ensure_can_cancel(user, request, db)
-    if _approval_has_started(db, request):
-        raise HTTPException(status_code=400, detail="Approval request is already in review")
 
     request.status = "CANCELLED"
     for step in db.scalars(
         select(ApprovalStep).where(ApprovalStep.approval_request_id == request.id)
     ).all():
-        step.status = "CANCELLED"
-        step.acted_at = datetime.now(timezone.utc)
+        if step.status == "PENDING":
+            step.status = "CANCELLED"
+            step.acted_at = datetime.now(timezone.utc)
     if not _has_other_active_request(db, request):
         for task in db.scalars(
             select(TaskEntry).where(TaskEntry.organization_id == request.organization_id)

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.dependencies import get_current_user, require_admin
 from backend.models import Organization
+from backend.services.approver_scope import approver_level_for_user, scope_condition_for_user
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 admin_router = APIRouter(prefix="/admin/organizations", tags=["admin-organizations"])
@@ -109,57 +110,15 @@ def _scoped_organization_query(user: dict):
         return query
     if user["role"] == "INPUTTER":
         return query.where(Organization.id == user["organization_id"])
+    if user["role"] == "APPROVER":
+        level = approver_level_for_user(user)
+        condition = scope_condition_for_user(user, Organization, level)
+        if condition is not None:
+            return query.where(condition)
+        if user.get("managed") or level in {"GROUP", "TEAM", "DIVISION", "PART"}:
+            return query.where(_own_organization_condition(user))
     employee_id = user["employee_id"]
-    current_org = user.get("organization") or {}
-    if current_org.get("group_head_id") == employee_id:
-        group_head_id = current_org.get("group_head_id")
-        group_name = current_org.get("group_name")
-        condition = _scope_condition(
-            Organization.group_head_id,
-            Organization.group_name,
-            group_head_id,
-            group_name,
-        )
-        if condition is not None:
-            return query.where(condition)
-        return query.where(_own_organization_condition(user))
-    if current_org.get("team_head_id") == employee_id:
-        team_head_id = current_org.get("team_head_id")
-        team_name = current_org.get("team_name")
-        condition = _scope_condition(
-            Organization.team_head_id,
-            Organization.team_name,
-            team_head_id,
-            team_name,
-        )
-        if condition is not None:
-            return query.where(condition)
-        return query.where(_own_organization_condition(user))
-    if current_org.get("division_head_id") == employee_id:
-        division_head_id = current_org.get("division_head_id")
-        division_name = current_org.get("division_name")
-        condition = _scope_condition(
-            Organization.division_head_id,
-            Organization.division_name,
-            division_head_id,
-            division_name,
-        )
-        if condition is not None:
-            return query.where(condition)
-        return query.where(_own_organization_condition(user))
-    if current_org.get("part_head_id") == employee_id:
-        return query.where(_own_organization_condition(user))
-    if user.get("managed"):
-        group_head_id = current_org.get("group_head_id")
-        group_name = current_org.get("group_name")
-        condition = _scope_condition(
-            Organization.group_head_id,
-            Organization.group_name,
-            group_head_id,
-            group_name,
-        )
-        if condition is not None:
-            return query.where(condition)
+    if user.get("organization", {}).get("part_head_id") == employee_id:
         return query.where(_own_organization_condition(user))
     return query.where(
         or_(

@@ -229,10 +229,11 @@ def test_submit_blocks_duplicate_pending_request():
     assert duplicate_response.json()["detail"] == "Pending approval request already exists"
 
 
-def test_requester_cannot_cancel_after_approval_has_started():
+def test_requester_can_cancel_started_approval_and_submit_again():
     client = TestClient(app)
     suffix = uuid4().hex[:8]
     group_head_id = _unique_id("cgroup")
+    part_head_id = _unique_id("cancel-part")
     org = client.post(
         "/api/admin/organizations",
         json={
@@ -247,7 +248,7 @@ def test_requester_cannot_cancel_after_approval_has_started():
             "group_head_id": group_head_id,
             "part_name": f"취소차단파트-{suffix}",
             "part_head_name": "취소차단파트장",
-            "part_head_id": _unique_id("cancel-part"),
+            "part_head_id": part_head_id,
             "org_type": "NORMAL",
         },
         headers={"X-Employee-Id": "admin001"},
@@ -261,22 +262,49 @@ def test_requester_cannot_cancel_after_approval_has_started():
             "confidential_answers": [["해당 없음"]],
             "national_tech_answers": [["해당 없음"]],
         },
-        headers={"X-Employee-Id": "admin001"},
+        headers={"X-Employee-Id": part_head_id},
     )
     approval = client.post(
         f"/api/approvals/submit?org_id={org['id']}",
-        headers={"X-Employee-Id": "admin001"},
+        headers={"X-Employee-Id": part_head_id},
     ).json()
     approve_response = client.post(
         f"/api/approvals/{approval['id']}/approve",
         headers={"X-Employee-Id": group_head_id},
     )
+    status_before_cancel = client.get(
+        f"/api/tasks/status?org_id={org['id']}",
+        headers={"X-Employee-Id": part_head_id},
+    )
 
     cancel_response = client.post(
         f"/api/approvals/{approval['id']}/cancel",
-        headers={"X-Employee-Id": "admin001"},
+        headers={"X-Employee-Id": part_head_id},
+    )
+    status_after_cancel = client.get(
+        f"/api/tasks/status?org_id={org['id']}",
+        headers={"X-Employee-Id": part_head_id},
+    )
+    tasks_after_cancel = client.get(
+        f"/api/tasks?org_id={org['id']}",
+        headers={"X-Employee-Id": part_head_id},
+    ).json()
+    resubmit_response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": part_head_id},
     )
 
     assert approve_response.status_code == 200
-    assert cancel_response.status_code == 400
-    assert cancel_response.json()["detail"] == "Approval request is already in review"
+    assert status_before_cancel.status_code == 200
+    assert status_before_cancel.json()["can_cancel_approval"] is True
+    assert cancel_response.status_code == 200
+    cancelled = cancel_response.json()
+    assert cancelled["status"] == "CANCELLED"
+    assert cancelled["steps"][0]["status"] == "APPROVED"
+    assert {step["status"] for step in cancelled["steps"][1:]} == {"CANCELLED"}
+    assert status_after_cancel.status_code == 200
+    assert status_after_cancel.json()["approval_status"] == "CANCELLED"
+    assert status_after_cancel.json()["active_approval_id"] is None
+    assert {task["status"] for task in tasks_after_cancel} == {"DRAFT"}
+    assert resubmit_response.status_code == 201
+    assert resubmit_response.json()["status"] == "PENDING"

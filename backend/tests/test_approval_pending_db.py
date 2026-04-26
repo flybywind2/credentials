@@ -8,6 +8,31 @@ from backend.main import app
 from backend.models import ApprovalRequest, ApprovalStep
 
 
+def _delete_approval_request(approval_id: int | None) -> None:
+    if approval_id is None:
+        return
+    with SessionLocal() as db:
+        db.execute(delete(ApprovalStep).where(ApprovalStep.approval_request_id == approval_id))
+        db.execute(delete(ApprovalRequest).where(ApprovalRequest.id == approval_id))
+        db.commit()
+
+
+def _create_task_for_org(client: TestClient, org_id: int, label: str) -> int:
+    response = client.post(
+        "/api/tasks",
+        headers={"X-Employee-Id": "admin001"},
+        json={
+            "organization_id": org_id,
+            "major_task": f"{label} 대업무",
+            "detail_task": f"{label} 세부업무",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
 def test_managed_group_approver_sees_assigned_group_pending_request():
     client = TestClient(app)
     admin_headers = {"X-Employee-Id": "admin001"}
@@ -104,6 +129,247 @@ def test_managed_group_approver_sees_assigned_group_pending_request():
                 db.commit()
         client.delete(f"/api/admin/users/{managed_group_id}", headers=admin_headers)
         client.delete(f"/api/tasks/{task_response.json()['id']}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{org['id']}", headers=admin_headers)
+
+
+def test_managed_team_approver_can_act_when_csv_head_id_differs_but_name_matches():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    suffix = uuid4().hex[:8]
+    approval_id = None
+    managed_team_id = f"mt{suffix}"
+    actual_group_head_id = f"cg{suffix}"
+    actual_team_head_id = f"ct{suffix}"
+    actual_division_head_id = f"cd{suffix}"
+    part_head_id = f"pt{suffix}"
+    peer_part_head_id = f"pp{suffix}"
+    org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"관리팀승인실-{suffix}",
+            "division_head_name": "관리팀승인실장",
+            "division_head_id": actual_division_head_id,
+            "team_name": f"관리팀승인팀-{suffix}",
+            "team_head_name": "관리팀승인팀장",
+            "team_head_id": actual_team_head_id,
+            "group_name": f"관리팀승인그룹A-{suffix}",
+            "group_head_name": "관리팀승인그룹장A",
+            "group_head_id": actual_group_head_id,
+            "part_name": f"관리팀승인파트A-{suffix}",
+            "part_head_name": "관리팀승인파트장A",
+            "part_head_id": part_head_id,
+            "org_type": "NORMAL",
+        },
+    )
+    assert org_response.status_code == 201
+    org = org_response.json()
+    peer_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"관리팀승인실-{suffix}",
+            "division_head_name": "관리팀승인실장",
+            "division_head_id": actual_division_head_id,
+            "team_name": f"관리팀승인팀-{suffix}",
+            "team_head_name": "관리팀승인팀장",
+            "team_head_id": actual_team_head_id,
+            "group_name": f"관리팀승인그룹B-{suffix}",
+            "group_head_name": "관리팀승인그룹장B",
+            "group_head_id": f"cgx{suffix}",
+            "part_name": f"관리팀승인파트B-{suffix}",
+            "part_head_name": "관리팀승인파트장B",
+            "part_head_id": peer_part_head_id,
+            "org_type": "NORMAL",
+        },
+    )
+    assert peer_org_response.status_code == 201
+    peer_org = peer_org_response.json()
+    task_id = _create_task_for_org(client, org["id"], "관리 팀장 승인")
+    peer_task_id = _create_task_for_org(client, peer_org["id"], "관리 팀장 범위")
+    create_user_response = client.post(
+        "/api/admin/users",
+        headers=admin_headers,
+        json={
+            "employee_id": managed_team_id,
+            "name": "관리팀승인팀장",
+            "role": "APPROVER",
+            "organization_id": org["id"],
+        },
+    )
+    assert create_user_response.status_code == 201
+    submit_response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": part_head_id},
+    )
+    assert submit_response.status_code == 201
+    approval_id = submit_response.json()["id"]
+    assert submit_response.json()["steps"][1]["approver_employee_id"] == actual_team_head_id
+    first_step_response = client.post(
+        f"/api/approvals/{approval_id}/approve",
+        headers={"X-Employee-Id": actual_group_head_id},
+    )
+    assert first_step_response.status_code == 200
+    assert first_step_response.json()["current_step"] == 2
+
+    try:
+        status_response = client.get(
+            "/api/approvals/subordinate-status",
+            headers={"X-Employee-Id": managed_team_id},
+        )
+        orgs_response = client.get("/api/organizations", headers={"X-Employee-Id": managed_team_id})
+        peer_tasks_response = client.get(
+            f"/api/tasks?org_id={peer_org['id']}",
+            headers={"X-Employee-Id": managed_team_id},
+        )
+        pending_response = client.get("/api/approvals/pending", headers={"X-Employee-Id": managed_team_id})
+        approve_response = client.post(
+            f"/api/approvals/{approval_id}/approve",
+            headers={"X-Employee-Id": managed_team_id},
+        )
+
+        assert status_response.status_code == 200
+        assert status_response.json()["scope_label"] == "그룹현황"
+        assert org["id"] in {
+            organization_id
+            for row in status_response.json()["rows"]
+            for organization_id in row["organization_ids"]
+            if row["approval_status"] == "PENDING"
+        }
+        assert orgs_response.status_code == 200
+        assert peer_org["id"] in {item["id"] for item in orgs_response.json()}
+        assert peer_tasks_response.status_code == 200
+        assert peer_task_id in {item["id"] for item in peer_tasks_response.json()}
+        assert pending_response.status_code == 200
+        assert approval_id in {item["id"] for item in pending_response.json()}
+        assert approve_response.status_code == 200
+        assert approve_response.json()["current_step"] == 3
+    finally:
+        _delete_approval_request(approval_id)
+        client.delete(f"/api/admin/users/{managed_team_id}", headers=admin_headers)
+        client.delete(f"/api/tasks/{peer_task_id}", headers=admin_headers)
+        client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{peer_org['id']}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{org['id']}", headers=admin_headers)
+
+
+def test_managed_division_approver_can_act_when_csv_head_id_differs_but_name_matches():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    suffix = uuid4().hex[:8]
+    approval_id = None
+    managed_division_id = f"md{suffix}"
+    actual_group_head_id = f"dg{suffix}"
+    actual_team_head_id = f"dt{suffix}"
+    actual_division_head_id = f"dd{suffix}"
+    part_head_id = f"dp{suffix}"
+    peer_part_head_id = f"dq{suffix}"
+    org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"관리실승인실-{suffix}",
+            "division_head_name": "관리실승인실장",
+            "division_head_id": actual_division_head_id,
+            "team_name": f"관리실승인팀A-{suffix}",
+            "team_head_name": "관리실승인팀장A",
+            "team_head_id": actual_team_head_id,
+            "group_name": f"관리실승인그룹-{suffix}",
+            "group_head_name": "관리실승인그룹장",
+            "group_head_id": actual_group_head_id,
+            "part_name": f"관리실승인파트A-{suffix}",
+            "part_head_name": "관리실승인파트장A",
+            "part_head_id": part_head_id,
+            "org_type": "NORMAL",
+        },
+    )
+    assert org_response.status_code == 201
+    org = org_response.json()
+    peer_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"관리실승인실-{suffix}",
+            "division_head_name": "관리실승인실장",
+            "division_head_id": actual_division_head_id,
+            "team_name": f"관리실승인팀B-{suffix}",
+            "team_head_name": "관리실승인팀장B",
+            "team_head_id": f"dtx{suffix}",
+            "group_name": f"관리실승인타그룹-{suffix}",
+            "group_head_name": "관리실승인타그룹장",
+            "group_head_id": f"dgx{suffix}",
+            "part_name": f"관리실승인파트B-{suffix}",
+            "part_head_name": "관리실승인파트장B",
+            "part_head_id": peer_part_head_id,
+            "org_type": "NORMAL",
+        },
+    )
+    assert peer_org_response.status_code == 201
+    peer_org = peer_org_response.json()
+    task_id = _create_task_for_org(client, org["id"], "관리 실장 승인")
+    peer_task_id = _create_task_for_org(client, peer_org["id"], "관리 실장 범위")
+    create_user_response = client.post(
+        "/api/admin/users",
+        headers=admin_headers,
+        json={
+            "employee_id": managed_division_id,
+            "name": "관리실승인실장",
+            "role": "APPROVER",
+            "organization_id": org["id"],
+        },
+    )
+    assert create_user_response.status_code == 201
+    submit_response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": part_head_id},
+    )
+    assert submit_response.status_code == 201
+    approval_id = submit_response.json()["id"]
+    assert submit_response.json()["steps"][2]["approver_employee_id"] == actual_division_head_id
+    first_step_response = client.post(
+        f"/api/approvals/{approval_id}/approve",
+        headers={"X-Employee-Id": actual_group_head_id},
+    )
+    assert first_step_response.status_code == 200
+    second_step_response = client.post(
+        f"/api/approvals/{approval_id}/approve",
+        headers={"X-Employee-Id": actual_team_head_id},
+    )
+    assert second_step_response.status_code == 200
+    assert second_step_response.json()["current_step"] == 3
+
+    try:
+        status_response = client.get(
+            "/api/approvals/subordinate-status",
+            headers={"X-Employee-Id": managed_division_id},
+        )
+        orgs_response = client.get("/api/organizations", headers={"X-Employee-Id": managed_division_id})
+        peer_tasks_response = client.get(
+            f"/api/tasks?org_id={peer_org['id']}",
+            headers={"X-Employee-Id": managed_division_id},
+        )
+        pending_response = client.get("/api/approvals/pending", headers={"X-Employee-Id": managed_division_id})
+        approve_response = client.post(
+            f"/api/approvals/{approval_id}/approve",
+            headers={"X-Employee-Id": managed_division_id},
+        )
+
+        assert status_response.status_code == 200
+        assert status_response.json()["scope_label"] == "실현황"
+        assert orgs_response.status_code == 200
+        assert peer_org["id"] in {item["id"] for item in orgs_response.json()}
+        assert peer_tasks_response.status_code == 200
+        assert peer_task_id in {item["id"] for item in peer_tasks_response.json()}
+        assert pending_response.status_code == 200
+        assert approval_id in {item["id"] for item in pending_response.json()}
+        assert approve_response.status_code == 200
+        assert approve_response.json()["status"] == "APPROVED"
+    finally:
+        _delete_approval_request(approval_id)
+        client.delete(f"/api/admin/users/{managed_division_id}", headers=admin_headers)
+        client.delete(f"/api/tasks/{peer_task_id}", headers=admin_headers)
+        client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{peer_org['id']}", headers=admin_headers)
         client.delete(f"/api/admin/organizations/{org['id']}", headers=admin_headers)
 
 

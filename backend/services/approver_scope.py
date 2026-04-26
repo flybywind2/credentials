@@ -113,26 +113,11 @@ def org_matches_user_scope(
         allow_managed_default=allow_managed_default,
     )
     if resolved_level == "DIVISION":
-        return same_scope_values(
-            current_org.get("division_head_id"),
-            current_org.get("division_name"),
-            org.division_head_id,
-            org.division_name,
-        )
+        return _same_text(current_org.get("division_name"), org.division_name)
     if resolved_level == "TEAM":
-        return same_scope_values(
-            current_org.get("team_head_id"),
-            current_org.get("team_name"),
-            org.team_head_id,
-            org.team_name,
-        )
+        return _same_text(current_org.get("team_name"), org.team_name)
     if resolved_level == "GROUP":
-        return same_scope_values(
-            current_org.get("group_head_id"),
-            current_org.get("group_name"),
-            org.group_head_id,
-            org.group_name,
-        )
+        return _same_text(current_org.get("group_name"), org.group_name)
     if resolved_level == "PART":
         return org.id == user.get("organization_id")
     return False
@@ -146,28 +131,29 @@ def _scope_condition(id_column: Any, name_column: Any, scope_id: str | None, sco
     return (id_column == scope_id) & (name_column == scope_name)
 
 
+def _name_scope_condition(name_column: Any, scope_name: str | None):
+    scope_name = _clean_text(scope_name)
+    if not scope_name:
+        return None
+    return name_column == scope_name
+
+
 def scope_condition_for_user(user: dict, organization_model: Any, level: ApproverLevel | None = None):
     current_org = user.get("organization") or {}
     resolved_level = level or approver_level_for_user(user)
     if resolved_level == "DIVISION":
-        return _scope_condition(
-            organization_model.division_head_id,
+        return _name_scope_condition(
             organization_model.division_name,
-            current_org.get("division_head_id"),
             current_org.get("division_name"),
         )
     if resolved_level == "TEAM":
-        return _scope_condition(
-            organization_model.team_head_id,
+        return _name_scope_condition(
             organization_model.team_name,
-            current_org.get("team_head_id"),
             current_org.get("team_name"),
         )
     if resolved_level == "GROUP":
-        return _scope_condition(
-            organization_model.group_head_id,
+        return _name_scope_condition(
             organization_model.group_name,
-            current_org.get("group_head_id"),
             current_org.get("group_name"),
         )
     if resolved_level == "PART":

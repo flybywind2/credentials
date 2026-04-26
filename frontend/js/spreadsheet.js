@@ -1,4 +1,4 @@
-import { currentEmployeeId, fetchJson } from "./api.js?v=20260426-mock-cookie";
+import { currentEmployeeId, fetchJson } from "./api.js?v=20260426-validation-errors";
 import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
@@ -105,6 +105,10 @@ function sameScope(left, right, idKey, nameKey) {
   return false;
 }
 
+function sameNameScope(left, right, nameKey) {
+  return sameScopeValue(left, right, nameKey);
+}
+
 function matchesApproverManagedScope(user, organization) {
   const currentOrganization = user?.organization;
   const employeeId = user?.employee_id;
@@ -112,13 +116,13 @@ function matchesApproverManagedScope(user, organization) {
     return isApproverForOrganization(user, organization);
   }
   if (employeeId && currentOrganization.group_head_id === employeeId) {
-    return sameScope(currentOrganization, organization, "group_head_id", "group_name");
+    return sameNameScope(currentOrganization, organization, "group_name");
   }
   if (employeeId && currentOrganization.team_head_id === employeeId) {
-    return sameScope(currentOrganization, organization, "team_head_id", "team_name");
+    return sameNameScope(currentOrganization, organization, "team_name");
   }
   if (employeeId && currentOrganization.division_head_id === employeeId) {
-    return sameScope(currentOrganization, organization, "division_head_id", "division_name");
+    return sameNameScope(currentOrganization, organization, "division_name");
   }
   if (user?.managed) {
     return sameScope(currentOrganization, organization, "group_head_id", "group_name");
@@ -229,6 +233,21 @@ export function groupValidationErrors(errors) {
 
 export function firstErrorRow(errors) {
   return errors.length ? Math.min(...errors.map((error) => error.row_index)) : null;
+}
+
+export function normalizeSubmitValidationErrors(error, tasks) {
+  if (!Array.isArray(error?.validationErrors)) {
+    return [];
+  }
+  const rowIndexByTaskId = new Map(
+    tasks.map((task, index) => [Number(task.id), index]),
+  );
+  return error.validationErrors.map((validationError) => ({
+    ...validationError,
+    row_index: Number.isInteger(validationError.row_index)
+      ? validationError.row_index
+      : rowIndexByTaskId.get(Number(validationError.task_id)) ?? 0,
+  }));
 }
 
 function validPreviewIndexes(rows, groupedErrors) {
@@ -1032,8 +1051,26 @@ export async function renderSpreadsheet(container, options = {}) {
       return;
     }
     openApprovalConfirmModal(tasks, async () => {
-      await fetchJson(`/api/approvals/submit?org_id=${orgId}`, { method: "POST" });
-      await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
+      try {
+        await fetchJson(`/api/approvals/submit?org_id=${orgId}`, { method: "POST" });
+        await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
+      } catch (submitError) {
+        const submitErrors = normalizeSubmitValidationErrors(submitError, tasks);
+        if (submitErrors.length) {
+          const submitGroupedErrors = groupValidationErrors(submitErrors);
+          renderTaskTable(submitGroupedErrors);
+          container.querySelector("[data-validation-panel]").innerHTML = renderValidationPanel(submitErrors);
+          container.querySelector("[data-action='jump-first-error']")?.addEventListener("click", () => {
+            const rowIndex = firstErrorRow(submitErrors);
+            container.querySelector(`[data-row-index="${rowIndex}"]`)?.scrollIntoView({ block: "center" });
+          });
+          return;
+        }
+        container.querySelector("[data-validation-panel]").innerHTML = renderActionError(
+          "승인 요청 실패",
+          submitError.message,
+        );
+      }
     });
   });
 

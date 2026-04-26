@@ -147,3 +147,54 @@ test("fetchJson preserves structured organization mapping errors", async () => {
     globalThis.fetch = previousFetch;
   }
 });
+
+test("fetchJson uses plain string API detail as the error message", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ detail: "Pending approval request already exists" }),
+  });
+
+  try {
+    await assert.rejects(
+      () => fetchJson("/api/approvals/submit?org_id=1", { method: "POST" }),
+      (error) => {
+        assert.equal(error.status, 400);
+        assert.equal(error.message, "Pending approval request already exists");
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("fetchJson preserves validation errors from failed API responses", async () => {
+  const validationErrors = [
+    { task_id: 10, field: "status", message: "분류 저장 후 승인 요청할 수 있습니다." },
+  ];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      detail: "Task validation failed",
+      validation_errors: validationErrors,
+    }),
+  });
+
+  try {
+    await assert.rejects(
+      () => fetchJson("/api/approvals/submit?org_id=1", { method: "POST" }),
+      (error) => {
+        assert.equal(error.status, 400);
+        assert.equal(error.message, "Task validation failed");
+        assert.deepEqual(error.validationErrors, validationErrors);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

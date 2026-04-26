@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-mock-cookie";
+import { fetchJson } from "./api.js?v=20260426-validation-errors";
 
 export const EMPLOYEE_STORAGE_KEY = "credential_employee_id";
 export const TOKEN_STORAGE_KEY = "credential_access_token";

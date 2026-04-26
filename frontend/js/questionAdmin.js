@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-mock-cookie";
+import { fetchJson } from "./api.js?v=20260426-validation-errors";
 
 const NONE_OPTION = "해당 없음";
 const POSITIVE_OPTION = "해당 됨";

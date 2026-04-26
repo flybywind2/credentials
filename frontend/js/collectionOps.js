@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-mock-cookie";
+import { fetchJson } from "./api.js?v=20260426-validation-errors";
 
 function escapeHtml(value) {
   return String(value ?? "")

@@ -734,6 +734,341 @@ def test_managed_team_head_can_read_all_groups_in_assigned_team():
         client.delete(f"/api/admin/organizations/{first_org_id}", headers=admin_headers)
 
 
+def test_group_head_scope_uses_group_name_when_peer_rows_have_different_head_id():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    suffix = uuid4().hex[:8]
+    employee_id = f"group-name-scope-{suffix}"
+    group_name = f"그룹명범위그룹-{suffix}"
+    created_org_ids: list[int] = []
+    created_task_ids: list[int] = []
+
+    def create_org(
+        *,
+        group_head_id: str,
+        group: str,
+        part: str,
+        part_head_id: str,
+    ) -> int:
+        response = client.post(
+            "/api/admin/organizations",
+            headers=admin_headers,
+            json={
+                "division_name": f"그룹명범위실-{suffix}",
+                "division_head_name": "그룹명범위실장",
+                "division_head_id": f"group-name-div-{suffix}",
+                "team_name": f"그룹명범위팀-{suffix}",
+                "team_head_name": "그룹명범위팀장",
+                "team_head_id": f"group-name-team-{suffix}",
+                "group_name": group,
+                "group_head_name": f"{group}장",
+                "group_head_id": group_head_id,
+                "part_name": part,
+                "part_head_name": f"{part}장",
+                "part_head_id": part_head_id,
+                "org_type": "NORMAL",
+            },
+        )
+        assert response.status_code == 201
+        org_id = response.json()["id"]
+        created_org_ids.append(org_id)
+        return org_id
+
+    try:
+        anchor_org_id = create_org(
+            group_head_id=employee_id,
+            group=group_name,
+            part=f"그룹명범위파트A-{suffix}",
+            part_head_id=f"group-name-part-a-{suffix}",
+        )
+        peer_org_id = create_org(
+            group_head_id=f"csv-other-group-head-{suffix}",
+            group=group_name,
+            part=f"그룹명범위파트B-{suffix}",
+            part_head_id=f"group-name-part-b-{suffix}",
+        )
+        other_group_org_id = create_org(
+            group_head_id=employee_id,
+            group=f"다른그룹명범위그룹-{suffix}",
+            part=f"다른그룹명범위파트-{suffix}",
+            part_head_id=f"group-name-part-c-{suffix}",
+        )
+        task_response = client.post(
+            "/api/tasks",
+            headers=admin_headers,
+            json={
+                "organization_id": peer_org_id,
+                "major_task": "그룹명 범위 대업무",
+                "detail_task": "같은 그룹명 안의 다른 group_head_id 행도 그룹장 하위로 본다.",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+        )
+        assert task_response.status_code == 201
+        task_id = task_response.json()["id"]
+        created_task_ids.append(task_id)
+
+        headers = {"X-Employee-Id": employee_id}
+        orgs_response = client.get("/api/organizations", headers=headers)
+        direct_tasks_response = client.get(f"/api/tasks?org_id={peer_org_id}", headers=headers)
+        status_response = client.get(f"/api/tasks/status?org_id={peer_org_id}", headers=headers)
+        group_tasks_response = client.get("/api/tasks/group", headers=headers)
+        members_response = client.get(f"/api/part-members?org_id={peer_org_id}", headers=headers)
+        subordinate_response = client.get("/api/approvals/subordinate-status", headers=headers)
+
+        assert orgs_response.status_code == 200
+        organization_ids = {item["id"] for item in orgs_response.json()}
+        assert anchor_org_id in organization_ids
+        assert peer_org_id in organization_ids
+        assert other_group_org_id not in organization_ids
+        assert direct_tasks_response.status_code == 200
+        assert task_id in {item["id"] for item in direct_tasks_response.json()}
+        assert status_response.status_code == 200
+        assert group_tasks_response.status_code == 200
+        assert task_id in {item["id"] for item in group_tasks_response.json()}
+        assert members_response.status_code == 200
+        assert subordinate_response.status_code == 200
+        subordinate_org_ids = {
+            org_id
+            for row in subordinate_response.json()["rows"]
+            for org_id in row["organization_ids"]
+        }
+        assert anchor_org_id in subordinate_org_ids
+        assert peer_org_id in subordinate_org_ids
+        assert other_group_org_id not in subordinate_org_ids
+    finally:
+        for task_id in reversed(created_task_ids):
+            client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        for org_id in reversed(created_org_ids):
+            client.delete(f"/api/admin/organizations/{org_id}", headers=admin_headers)
+
+
+def test_team_head_scope_uses_team_name_when_peer_rows_have_different_head_id():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    suffix = uuid4().hex[:8]
+    employee_id = f"team-name-scope-{suffix}"
+    team_name = f"팀명범위팀-{suffix}"
+    created_org_ids: list[int] = []
+    created_task_ids: list[int] = []
+
+    def create_org(
+        *,
+        team_head_id: str,
+        team: str,
+        group: str,
+        part: str,
+        part_head_id: str,
+    ) -> int:
+        response = client.post(
+            "/api/admin/organizations",
+            headers=admin_headers,
+            json={
+                "division_name": f"팀명범위실-{suffix}",
+                "division_head_name": "팀명범위실장",
+                "division_head_id": f"team-name-div-{suffix}",
+                "team_name": team,
+                "team_head_name": f"{team}장",
+                "team_head_id": team_head_id,
+                "group_name": group,
+                "group_head_name": f"{group}장",
+                "group_head_id": f"{group}-head",
+                "part_name": part,
+                "part_head_name": f"{part}장",
+                "part_head_id": part_head_id,
+                "org_type": "NORMAL",
+            },
+        )
+        assert response.status_code == 201
+        org_id = response.json()["id"]
+        created_org_ids.append(org_id)
+        return org_id
+
+    try:
+        anchor_org_id = create_org(
+            team_head_id=employee_id,
+            team=team_name,
+            group=f"팀명범위그룹A-{suffix}",
+            part=f"팀명범위파트A-{suffix}",
+            part_head_id=f"team-name-part-a-{suffix}",
+        )
+        peer_org_id = create_org(
+            team_head_id=f"csv-other-team-head-{suffix}",
+            team=team_name,
+            group=f"팀명범위그룹B-{suffix}",
+            part=f"팀명범위파트B-{suffix}",
+            part_head_id=f"team-name-part-b-{suffix}",
+        )
+        other_team_org_id = create_org(
+            team_head_id=employee_id,
+            team=f"다른팀명범위팀-{suffix}",
+            group=f"다른팀명범위그룹-{suffix}",
+            part=f"다른팀명범위파트-{suffix}",
+            part_head_id=f"team-name-part-c-{suffix}",
+        )
+        task_response = client.post(
+            "/api/tasks",
+            headers=admin_headers,
+            json={
+                "organization_id": peer_org_id,
+                "major_task": "팀명 범위 대업무",
+                "detail_task": "같은 팀명 안의 다른 team_head_id 행도 팀장 하위로 본다.",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+        )
+        assert task_response.status_code == 201
+        task_id = task_response.json()["id"]
+        created_task_ids.append(task_id)
+
+        headers = {"X-Employee-Id": employee_id}
+        orgs_response = client.get("/api/organizations", headers=headers)
+        direct_tasks_response = client.get(f"/api/tasks?org_id={peer_org_id}", headers=headers)
+        status_response = client.get(f"/api/tasks/status?org_id={peer_org_id}", headers=headers)
+        group_tasks_response = client.get("/api/tasks/group", headers=headers)
+        members_response = client.get(f"/api/part-members?org_id={peer_org_id}", headers=headers)
+        subordinate_response = client.get("/api/approvals/subordinate-status", headers=headers)
+
+        assert orgs_response.status_code == 200
+        organization_ids = {item["id"] for item in orgs_response.json()}
+        assert anchor_org_id in organization_ids
+        assert peer_org_id in organization_ids
+        assert other_team_org_id not in organization_ids
+        assert direct_tasks_response.status_code == 200
+        assert task_id in {item["id"] for item in direct_tasks_response.json()}
+        assert status_response.status_code == 200
+        assert group_tasks_response.status_code == 200
+        assert task_id in {item["id"] for item in group_tasks_response.json()}
+        assert members_response.status_code == 200
+        assert subordinate_response.status_code == 200
+        subordinate_org_ids = {
+            org_id
+            for row in subordinate_response.json()["rows"]
+            for org_id in row["organization_ids"]
+        }
+        assert anchor_org_id in subordinate_org_ids
+        assert peer_org_id in subordinate_org_ids
+        assert other_team_org_id not in subordinate_org_ids
+    finally:
+        for task_id in reversed(created_task_ids):
+            client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        for org_id in reversed(created_org_ids):
+            client.delete(f"/api/admin/organizations/{org_id}", headers=admin_headers)
+
+
+def test_division_head_scope_uses_division_name_when_peer_rows_have_different_head_id():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    suffix = uuid4().hex[:8]
+    employee_id = f"division-name-scope-{suffix}"
+    division_name = f"실명범위실-{suffix}"
+    created_org_ids: list[int] = []
+    created_task_ids: list[int] = []
+
+    def create_org(
+        *,
+        division_head_id: str,
+        division: str,
+        team: str,
+        part: str,
+        part_head_id: str,
+    ) -> int:
+        response = client.post(
+            "/api/admin/organizations",
+            headers=admin_headers,
+            json={
+                "division_name": division,
+                "division_head_name": f"{division}장",
+                "division_head_id": division_head_id,
+                "team_name": team,
+                "team_head_name": f"{team}장",
+                "team_head_id": f"{team}-head",
+                "group_name": f"{team}그룹",
+                "group_head_name": f"{team}그룹장",
+                "group_head_id": f"{team}-group",
+                "part_name": part,
+                "part_head_name": f"{part}장",
+                "part_head_id": part_head_id,
+                "org_type": "NORMAL",
+            },
+        )
+        assert response.status_code == 201
+        org_id = response.json()["id"]
+        created_org_ids.append(org_id)
+        return org_id
+
+    try:
+        anchor_org_id = create_org(
+            division_head_id=employee_id,
+            division=division_name,
+            team=f"실명범위팀A-{suffix}",
+            part=f"실명범위파트A-{suffix}",
+            part_head_id=f"division-name-part-a-{suffix}",
+        )
+        peer_org_id = create_org(
+            division_head_id=f"csv-other-division-head-{suffix}",
+            division=division_name,
+            team=f"실명범위팀B-{suffix}",
+            part=f"실명범위파트B-{suffix}",
+            part_head_id=f"division-name-part-b-{suffix}",
+        )
+        other_division_org_id = create_org(
+            division_head_id=employee_id,
+            division=f"다른실명범위실-{suffix}",
+            team=f"다른실명범위팀-{suffix}",
+            part=f"다른실명범위파트-{suffix}",
+            part_head_id=f"division-name-part-c-{suffix}",
+        )
+        task_response = client.post(
+            "/api/tasks",
+            headers=admin_headers,
+            json={
+                "organization_id": peer_org_id,
+                "major_task": "실명 범위 대업무",
+                "detail_task": "같은 실명 안의 다른 division_head_id 행도 실장 하위로 본다.",
+                "confidential_answers": [["해당 없음"]],
+                "national_tech_answers": [["해당 없음"]],
+            },
+        )
+        assert task_response.status_code == 201
+        task_id = task_response.json()["id"]
+        created_task_ids.append(task_id)
+
+        headers = {"X-Employee-Id": employee_id}
+        orgs_response = client.get("/api/organizations", headers=headers)
+        direct_tasks_response = client.get(f"/api/tasks?org_id={peer_org_id}", headers=headers)
+        status_response = client.get(f"/api/tasks/status?org_id={peer_org_id}", headers=headers)
+        group_tasks_response = client.get("/api/tasks/group", headers=headers)
+        members_response = client.get(f"/api/part-members?org_id={peer_org_id}", headers=headers)
+        subordinate_response = client.get("/api/approvals/subordinate-status", headers=headers)
+
+        assert orgs_response.status_code == 200
+        organization_ids = {item["id"] for item in orgs_response.json()}
+        assert anchor_org_id in organization_ids
+        assert peer_org_id in organization_ids
+        assert other_division_org_id not in organization_ids
+        assert direct_tasks_response.status_code == 200
+        assert task_id in {item["id"] for item in direct_tasks_response.json()}
+        assert status_response.status_code == 200
+        assert group_tasks_response.status_code == 200
+        assert task_id in {item["id"] for item in group_tasks_response.json()}
+        assert members_response.status_code == 200
+        assert subordinate_response.status_code == 200
+        subordinate_org_ids = {
+            org_id
+            for row in subordinate_response.json()["rows"]
+            for org_id in row["organization_ids"]
+        }
+        assert anchor_org_id in subordinate_org_ids
+        assert peer_org_id in subordinate_org_ids
+        assert other_division_org_id not in subordinate_org_ids
+    finally:
+        for task_id in reversed(created_task_ids):
+            client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        for org_id in reversed(created_org_ids):
+            client.delete(f"/api/admin/organizations/{org_id}", headers=admin_headers)
+
+
 def test_managed_approver_anchor_part_does_not_grant_part_writer_permissions():
     client = TestClient(app)
     admin_headers = {"X-Employee-Id": "admin001"}

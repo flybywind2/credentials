@@ -56,6 +56,33 @@ def test_task_validation_accepts_valid_rows():
     assert response.json()["error_count"] == 0
 
 
+def test_task_validation_blocks_uploaded_rows_before_submit():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/tasks/validate",
+        json={
+            "rows": [
+                {
+                    "organization_id": 1,
+                    "major_task": "업로드 대업무",
+                    "detail_task": "웹 저장 전 업로드 세부업무",
+                    "status": "UPLOADED",
+                    "confidential_answers": [["해당 없음"]],
+                    "national_tech_answers": [["해당 없음"]],
+                }
+            ]
+        },
+        headers={"X-Employee-Id": "part001"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valid_count"] == 0
+    assert body["error_count"] == 1
+    assert body["errors"][0]["field"] == "status"
+
+
 def test_task_validation_accepts_question_answer_objects():
     client = TestClient(app)
 

@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-mock-cookie";
+import { fetchJson } from "./api.js?v=20260426-validation-errors";
 import { renderClassificationDonut } from "./classificationChart.js?v=20260426-classification-donut";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { loadReadablePartMembers } from "./partMembers.js?v=20260426-mock-cookie";
@@ -7,7 +7,7 @@ import {
   orgPathOfOrganization,
   selectedEditableOrganization,
   shouldShowOrganizationSelector,
-} from "./spreadsheet.js?v=20260426-rejection-current-status";
+} from "./spreadsheet.js?v=20260426-org-name-scope";
 
 function escapeHtml(value) {
   return String(value ?? "")

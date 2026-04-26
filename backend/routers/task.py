@@ -96,6 +96,7 @@ class TaskUpdate(BaseModel):
 
 class TaskValidationRow(BaseModel):
     organization_id: int | None = None
+    status: str | None = None
     major_task: str | None = None
     detail_task: str | None = None
     confidential_answers: list[QuestionAnswerInput] | None = None
@@ -734,6 +735,11 @@ def _validate_task_rows(rows: list[TaskValidationRow], user: dict, db: Session |
                 ensure_can_write_org(user, row.organization_id, db)
             except HTTPException:
                 row_errors.append(("organization_id", "조직 접근 권한이 없습니다."))
+        if row.status == "UPLOADED":
+            row_errors.append((
+                "status",
+                "Excel/붙여넣기 업로드 행은 웹에서 분류 저장 후 승인 요청할 수 있습니다.",
+            ))
         if not row.major_task:
             row_errors.append(("major_task", "대업무는 필수입니다."))
         if not row.detail_task:

@@ -8,6 +8,7 @@ import {
   editableOrganizationsForUser,
   firstErrorRow,
   groupValidationErrors,
+  normalizeSubmitValidationErrors,
   previewSelectionSummary,
   renderActionError,
   selectedEditableOrganization,
@@ -33,6 +34,23 @@ test("groupValidationErrors groups backend cell errors by row", () => {
 test("firstErrorRow returns the earliest row index", () => {
   assert.equal(firstErrorRow([{ row_index: 5 }, { row_index: 1 }]), 1);
   assert.equal(firstErrorRow([]), null);
+});
+
+test("normalizeSubmitValidationErrors maps task ids back to visible rows", () => {
+  const errors = normalizeSubmitValidationErrors(
+    {
+      validationErrors: [
+        { task_id: 20, field: "status", message: "분류 저장 필요" },
+        { task_id: 99, field: "major_task", message: "대업무 필수" },
+      ],
+    },
+    [{ id: 10 }, { id: 20 }],
+  );
+
+  assert.deepEqual(errors, [
+    { task_id: 20, field: "status", message: "분류 저장 필요", row_index: 1 },
+    { task_id: 99, field: "major_task", message: "대업무 필수", row_index: 0 },
+  ]);
 });
 
 test("spreadsheet source includes approval confirmation and excel preview flow", () => {
@@ -179,7 +197,82 @@ test("editableOrganizationsForUser uses team scope for managed team approvers", 
 
   assert.deepEqual(
     editableOrganizationsForUser(user, organizations).map((org) => org.id),
-    [20, 21],
+    [20, 21, 23],
+  );
+});
+
+test("editableOrganizationsForUser uses group name scope for group heads", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "group001",
+    organization_id: 24,
+    organization: {
+      id: 24,
+      team_name: "정보전략팀",
+      group_head_id: "group001",
+      group_name: "AI/IT전략그룹",
+      part_name: "전략파트",
+    },
+  };
+  const organizations = [
+    { id: 24, team_name: "정보전략팀", group_head_id: "group001", group_name: "AI/IT전략그룹", part_name: "전략파트" },
+    { id: 25, team_name: "정보전략팀", group_head_id: "csv-group-head", group_name: "AI/IT전략그룹", part_name: "자동화파트" },
+    { id: 26, team_name: "정보전략팀", group_head_id: "group001", group_name: "다른전략그룹", part_name: "제외파트" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [24, 25],
+  );
+});
+
+test("editableOrganizationsForUser uses team name scope for team heads", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "team001",
+    organization_id: 27,
+    organization: {
+      id: 27,
+      team_head_id: "team001",
+      team_name: "정보전략팀",
+      group_name: "AI/IT전략그룹",
+      part_name: "전략파트",
+    },
+  };
+  const organizations = [
+    { id: 27, team_head_id: "team001", team_name: "정보전략팀", group_name: "AI/IT전략그룹", part_name: "전략파트" },
+    { id: 28, team_head_id: "csv-team-head", team_name: "정보전략팀", group_name: "생성형AI그룹", part_name: "AI파트" },
+    { id: 29, team_head_id: "team001", team_name: "다른정보전략팀", group_name: "타그룹", part_name: "제외파트" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [27, 28],
+  );
+});
+
+test("editableOrganizationsForUser uses division name scope for division heads", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "div001",
+    organization_id: 30,
+    organization: {
+      id: 30,
+      division_head_id: "div001",
+      division_name: "AI개발실",
+      team_name: "정보전략팀",
+      part_name: "전략파트",
+    },
+  };
+  const organizations = [
+    { id: 30, division_head_id: "div001", division_name: "AI개발실", team_name: "정보전략팀", part_name: "전략파트" },
+    { id: 31, division_head_id: "csv-div-head", division_name: "AI개발실", team_name: "Generative AI팀", part_name: "AI파트" },
+    { id: 32, division_head_id: "div001", division_name: "다른개발실", team_name: "타팀", part_name: "제외파트" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [30, 31],
   );
 });
 
@@ -188,11 +281,11 @@ test("selectedEditableOrganization accepts selected subordinate part and falls b
     role: "APPROVER",
     employee_id: "group001",
     organization_id: 1,
-    organization: { id: 1, group_head_id: "group001", part_name: "A" },
+    organization: { id: 1, group_head_id: "group001", group_name: "선택그룹", part_name: "A" },
   };
   const organizations = [
-    { id: 1, group_head_id: "group001", part_head_id: "part001", part_name: "A" },
-    { id: 2, group_head_id: "group001", part_head_id: "part002", part_name: "B" },
+    { id: 1, group_head_id: "group001", group_name: "선택그룹", part_head_id: "part001", part_name: "A" },
+    { id: 2, group_head_id: "csv-group-head", group_name: "선택그룹", part_head_id: "part002", part_name: "B" },
   ];
 
   assert.equal(selectedEditableOrganization(user, organizations, 2).id, 2);

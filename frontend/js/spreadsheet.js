@@ -1,4 +1,4 @@
-import { currentEmployeeId, fetchJson } from "./api.js?v=20260426-validation-errors";
+import { fetchJson } from "./api.js?v=20260426-validation-errors";
 import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
@@ -246,11 +246,6 @@ function classificationSummary(rows) {
 function assigneeSummary(task) {
   const names = (task.assignees || []).map((assignee) => assignee.name || assignee.knox_id).filter(Boolean);
   return names.length ? names.join(", ") : "-";
-}
-
-function formDataHeaders() {
-  const employeeId = currentEmployeeId();
-  return employeeId ? { "X-Employee-Id": employeeId } : {};
 }
 
 export function groupValidationErrors(errors) {
@@ -651,8 +646,8 @@ function openInputGuideModal() {
           <p>행 추가를 눌러 소파트, 대업무, 세부업무를 입력합니다. 행을 클릭하면 상세 입력 모달에서 담당자와 판정 정보를 보완할 수 있습니다.</p>
         </section>
         <section class="guide-step">
-          <strong>2. Excel Import 또는 붙여넣기</strong>
-          <p>양식은 소파트, 대업무, 세부업무 3개 컬럼만 사용합니다. 업로드 행은 먼저 UPLOADED 상태가 되며, 웹 상세 입력 모달에서 분류 저장을 완료해야 합니다.</p>
+          <strong>2. Excel 붙여넣기</strong>
+          <p>붙여넣기는 소파트, 대업무, 세부업무 3개 컬럼만 사용합니다. 붙여넣은 행은 먼저 UPLOADED 상태가 되며, 웹 상세 입력 모달에서 분류 저장을 완료해야 합니다.</p>
         </section>
         <section class="guide-step">
           <strong>3. 기밀/국가핵심기술/Compliance 분류</strong>
@@ -660,7 +655,7 @@ function openInputGuideModal() {
         </section>
         <section class="guide-step">
           <strong>4. 승인 요청 전 확인</strong>
-          <p>전체 저장으로 누락 값을 확인합니다. UPLOADED 행, 필수값 누락, 분류 메타데이터 누락이 있으면 승인 요청이 차단됩니다.</p>
+          <p>전체 검증으로 누락 값을 확인합니다. UPLOADED 행, 필수값 누락, 분류 메타데이터 누락이 있으면 승인 요청이 차단됩니다.</p>
         </section>
       </div>
       <div class="modal-actions">
@@ -674,82 +669,6 @@ function openInputGuideModal() {
     }
   });
   bindModalAccessibility(overlay, closeInputGuide);
-  document.body.append(overlay);
-}
-
-async function openExcelPreviewModal(file, orgId, onSaveRows) {
-  closePastePreview();
-  const formData = new FormData();
-  formData.append("file", file);
-  const response = await fetch(`/api/tasks/import/preview?org_id=${orgId}`, {
-    method: "POST",
-    headers: formDataHeaders(),
-    body: formData,
-  });
-  if (!response.ok) {
-    throw new Error(`Excel Import 미리보기 실패: ${response.status}`);
-  }
-  const result = await response.json();
-  const rows = result.rows || [];
-  const groupedErrors = groupValidationErrors(result.errors || []);
-  let selectedIndexes = validPreviewIndexes(rows, groupedErrors);
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
-  overlay.id = "paste-preview-modal";
-  overlay.innerHTML = `
-    <section class="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="excel-preview-title">
-      <header class="modal-header">
-        <div>
-          <h2 id="excel-preview-title">Excel Import 미리보기</h2>
-          <p>소파트, 대업무, 세부업무만 검증하고 정상 행만 업로드합니다.</p>
-        </div>
-        <button class="icon-button" type="button" aria-label="닫기" title="닫기">×</button>
-      </header>
-      <div class="paste-preview-body">
-        <div class="preview-summary" data-preview-summary>
-          ${renderPreviewSummary(rows, groupedErrors, selectedIndexes)}
-        </div>
-        <div data-preview-result>${renderPreviewRows(rows, groupedErrors, selectedIndexes)}</div>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary-button" data-action="cancel">취소</button>
-        <button type="button" class="secondary-button" data-action="preview-save-selected" ${result.valid_count ? "" : "disabled"}>선택 행 저장</button>
-        <button type="button" class="primary-button" data-action="preview-save-all" ${result.valid_count ? "" : "disabled"}>전체 정상 행 저장</button>
-      </div>
-    </section>
-  `;
-  overlay.addEventListener("click", async (event) => {
-    if (event.target === overlay || event.target.closest(".icon-button, [data-action='cancel']")) {
-      closePastePreview();
-      return;
-    }
-    if (event.target.closest("[data-action='preview-save-selected']")) {
-      const validRows = selectedPreviewRows(rows, groupedErrors, selectedIndexes);
-      await onSaveRows(validRows);
-      closePastePreview();
-      return;
-    }
-    if (event.target.closest("[data-action='preview-save-all']")) {
-      const validRows = allValidPreviewRows(rows, groupedErrors);
-      await onSaveRows(validRows);
-      closePastePreview();
-    }
-  });
-  overlay.addEventListener("change", (event) => {
-    const checkbox = event.target.closest("[data-preview-row-select]");
-    if (!checkbox) {
-      return;
-    }
-    const rowIndex = Number(checkbox.dataset.previewRowSelect);
-    if (checkbox.checked) {
-      selectedIndexes.add(rowIndex);
-    } else {
-      selectedIndexes.delete(rowIndex);
-    }
-    updatePreviewActions(overlay, rows, groupedErrors, selectedIndexes);
-  });
-  updatePreviewActions(overlay, rows, groupedErrors, selectedIndexes);
-  bindModalAccessibility(overlay, closePastePreview);
   document.body.append(overlay);
 }
 
@@ -810,7 +729,7 @@ function renderUploadedBlockPanel(count) {
     <div class="validation-panel" role="alert">
       <div>
         <strong>분류 저장 필요 ${count}건</strong>
-        <span>Excel Import 또는 붙여넣기로 업로드한 행은 행을 열어 웹에서 분류를 저장한 뒤 승인 요청할 수 있습니다.</span>
+        <span>Excel 붙여넣기로 업로드한 행은 행을 열어 웹에서 분류를 저장한 뒤 승인 요청할 수 있습니다.</span>
       </div>
     </div>
   `;
@@ -953,12 +872,9 @@ export async function renderSpreadsheet(container, options = {}) {
             aria-pressed="${showExampleData}"
           >${showExampleData ? "예시 데이터 끄기" : "예시 데이터 보기"}</button>
           <button type="button" class="secondary-button" data-action="add-row">행 추가</button>
-          <button type="button" class="secondary-button" data-action="save-all">전체 저장</button>
+          <button type="button" class="secondary-button" data-action="save-all">전체 검증</button>
           <button type="button" class="secondary-button" data-action="download-template">양식</button>
-          <label class="secondary-button file-button" for="task-excel-import">Excel Import
-            <input id="task-excel-import" type="file" accept=".xlsx" data-action="excel-import">
-          </label>
-        <button type="button" class="secondary-button" data-action="paste-preview">Excel 붙여넣기</button>
+          <button type="button" class="secondary-button" data-action="paste-preview">Excel 붙여넣기</button>
           <button type="button" class="${approvalAction.className}" data-action="${approvalAction.action}" ${approvalAction.disabled ? "disabled" : ""}>${approvalAction.label}</button>
         </div>
       </div>
@@ -1088,7 +1004,7 @@ export async function renderSpreadsheet(container, options = {}) {
     renderTaskTable(groupedErrors);
     container.querySelector("[data-validation-panel]").innerHTML = errors.length
       ? renderValidationPanel(errors)
-      : `<div class="validation-panel success-panel" role="status"><strong>전체 저장 상태 확인 완료</strong><span>현재 행은 서버에 저장되어 있으며 승인 요청할 수 있습니다.</span></div>`;
+      : `<div class="validation-panel success-panel" role="status"><strong>전체 검증 상태 확인 완료</strong><span>현재 행은 서버에 저장되어 있으며 승인 요청할 수 있습니다.</span></div>`;
     container.querySelector("[data-action='jump-first-error']")?.addEventListener("click", () => {
       const rowIndex = firstErrorRow(errors);
       container.querySelector(`[data-row-index="${rowIndex}"]`)?.scrollIntoView({ block: "center" });
@@ -1102,24 +1018,6 @@ export async function renderSpreadsheet(container, options = {}) {
 
   container.querySelector("[data-action='download-template']").addEventListener("click", () => {
     window.location.href = "/api/tasks/template";
-  });
-
-  container.querySelector("[data-action='excel-import']").addEventListener("change", async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    try {
-      await openExcelPreviewModal(file, orgId, async (validRows) => {
-        await saveImportedRows(validRows);
-        await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
-      });
-    } catch (error) {
-      container.querySelector("[data-validation-panel]").innerHTML = `
-        <div class="validation-panel" role="alert"><strong>Excel Import 실패</strong><span>${escapeHtml(error.message)}</span></div>
-      `;
-    }
-    event.target.value = "";
   });
 
   container.querySelector("[data-action='cancel-approval']")?.addEventListener("click", async () => {

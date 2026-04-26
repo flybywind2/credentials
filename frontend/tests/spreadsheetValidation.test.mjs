@@ -55,10 +55,9 @@ test("normalizeSubmitValidationErrors maps task ids back to visible rows", () =>
   ]);
 });
 
-test("spreadsheet source includes approval confirmation and excel preview flow", () => {
+test("spreadsheet source includes approval confirmation and paste-only preview flow", () => {
   assert.match(spreadsheetSource, /approval-confirm-modal/);
   assert.match(spreadsheetSource, /\/api\/organizations/);
-  assert.match(spreadsheetSource, /\/api\/tasks\/import\/preview/);
   assert.match(spreadsheetSource, /\/api\/tasks\/bulk/);
   assert.match(spreadsheetSource, /loadReadablePartMembers\(fetchJson, orgId\)/);
   assert.match(partMembersSource, /\/api\/part-members/);
@@ -69,6 +68,11 @@ test("spreadsheet source includes approval confirmation and excel preview flow",
   assert.match(spreadsheetSource, /status === "UPLOADED"/);
   assert.match(spreadsheetSource, /분류 저장 필요/);
   assert.match(spreadsheetSource, /data-action="save-all"/);
+  assert.match(spreadsheetSource, />전체 검증<\/button>/);
+  assert.match(spreadsheetSource, /전체 검증 상태 확인 완료/);
+  assert.match(spreadsheetSource, /전체 검증으로 누락 값을 확인합니다/);
+  assert.doesNotMatch(spreadsheetSource, />전체 저장<\/button>/);
+  assert.doesNotMatch(spreadsheetSource, /전체 저장 상태 확인 완료/);
   assert.match(spreadsheetSource, /data-action="input-guide"/);
   assert.match(spreadsheetSource, /업무 입력 가이드/);
   assert.match(spreadsheetSource, /승인 요청 전 확인/);
@@ -80,6 +84,10 @@ test("spreadsheet source includes approval confirmation and excel preview flow",
   assert.match(spreadsheetSource, /\/api\/approvals\/\$\{partStatus\.active_approval_id\}\/cancel/);
   assert.match(spreadsheetSource, /data-action="preview-save-selected"/);
   assert.match(spreadsheetSource, /data-action="preview-save-all"/);
+  assert.match(spreadsheetSource, /data-action="paste-preview"/);
+  assert.doesNotMatch(spreadsheetSource, /Excel Import/);
+  assert.doesNotMatch(spreadsheetSource, /data-action="excel-import"/);
+  assert.doesNotMatch(spreadsheetSource, /\/api\/tasks\/import\/preview/);
 });
 
 test("spreadsheet paste modal uses a grid-oriented Excel paste flow", () => {
@@ -88,6 +96,12 @@ test("spreadsheet paste modal uses a grid-oriented Excel paste flow", () => {
   assert.match(spreadsheetSource, /text\/html/);
   assert.match(spreadsheetSource, /data-paste-dropzone/);
   assert.doesNotMatch(spreadsheetSource, /TSV 데이터/);
+});
+
+test("input guide explains paste flow without file import content", () => {
+  assert.match(spreadsheetSource, /<strong>2\. Excel 붙여넣기<\/strong>/);
+  assert.match(spreadsheetSource, /붙여넣은 행은 먼저 UPLOADED 상태가/);
+  assert.doesNotMatch(spreadsheetSource, /Excel Import 또는 붙여넣기/);
 });
 
 test("approvalActionForStatus switches to cancel while a pending request is active", () => {

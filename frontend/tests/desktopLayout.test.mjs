@@ -33,9 +33,6 @@ test("input guide modal has compact guided step styling", () => {
   assert.match(css, /\.guide-step\s*\{[\s\S]*border:\s*1px solid var\(--accent-line\);/);
 });
 
-test("excel import file label uses button-like vertical centering", () => {
-  const fileButtonBlock = css.match(/\.file-button\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
-
-  assert.match(fileButtonBlock, /display:\s*inline-flex;/);
-  assert.match(fileButtonBlock, /align-items:\s*center;/);
+test("desktop layout no longer depends on an excel import file button", () => {
+  assert.doesNotMatch(html, /task-excel-import/);
 });

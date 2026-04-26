@@ -105,9 +105,6 @@ function matchesApproverManagedScope(user, organization) {
   if (!currentOrganization || !organization) {
     return isApproverForOrganization(user, organization);
   }
-  if (user?.managed) {
-    return sameScope(currentOrganization, organization, "group_head_id", "group_name");
-  }
   if (employeeId && currentOrganization.group_head_id === employeeId) {
     return sameScope(currentOrganization, organization, "group_head_id", "group_name");
   }
@@ -116,6 +113,9 @@ function matchesApproverManagedScope(user, organization) {
   }
   if (employeeId && currentOrganization.division_head_id === employeeId) {
     return sameScope(currentOrganization, organization, "division_head_id", "division_name");
+  }
+  if (user?.managed) {
+    return sameScope(currentOrganization, organization, "group_head_id", "group_name");
   }
   return isApproverForOrganization(user, organization);
 }

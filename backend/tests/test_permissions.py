@@ -420,6 +420,136 @@ def test_managed_approver_org_assignment_overrides_org_head_auto_scope():
         client.delete(f"/api/admin/organizations/{auto_scope_org_id}", headers=admin_headers)
 
 
+def test_managed_team_head_can_read_all_groups_in_assigned_team():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    managed_employee_id = f"managed-team-{uuid4().hex[:8]}"
+    first_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": "관리팀권한실",
+            "division_head_name": "관리팀권한실장",
+            "division_head_id": "managed-team-scope-div",
+            "team_name": "관리팀권한팀",
+            "team_head_name": "관리팀권한팀장",
+            "team_head_id": managed_employee_id,
+            "group_name": "관리팀권한그룹A",
+            "group_head_name": "관리팀권한그룹장A",
+            "group_head_id": "managed-team-scope-group-a",
+            "part_name": "관리팀권한파트A",
+            "part_head_name": "관리팀권한파트장A",
+            "part_head_id": "managed-team-scope-part-a",
+            "org_type": "NORMAL",
+        },
+    )
+    assert first_org_response.status_code == 201
+    first_org_id = first_org_response.json()["id"]
+    peer_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": "관리팀권한실",
+            "division_head_name": "관리팀권한실장",
+            "division_head_id": "managed-team-scope-div",
+            "team_name": "관리팀권한팀",
+            "team_head_name": "관리팀권한팀장",
+            "team_head_id": managed_employee_id,
+            "group_name": "관리팀권한그룹B",
+            "group_head_name": "관리팀권한그룹장B",
+            "group_head_id": "managed-team-scope-group-b",
+            "part_name": "관리팀권한파트B",
+            "part_head_name": "관리팀권한파트장B",
+            "part_head_id": "managed-team-scope-part-b",
+            "org_type": "NORMAL",
+        },
+    )
+    assert peer_org_response.status_code == 201
+    peer_org_id = peer_org_response.json()["id"]
+    other_team_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": "관리팀권한실",
+            "division_head_name": "관리팀권한실장",
+            "division_head_id": "managed-team-scope-div",
+            "team_name": "관리팀권한타팀",
+            "team_head_name": "관리팀권한팀장",
+            "team_head_id": managed_employee_id,
+            "group_name": "관리팀권한타그룹",
+            "group_head_name": "관리팀권한타그룹장",
+            "group_head_id": "managed-team-scope-other-group",
+            "part_name": "관리팀권한타파트",
+            "part_head_name": "관리팀권한타파트장",
+            "part_head_id": "managed-team-scope-other-part",
+            "org_type": "NORMAL",
+        },
+    )
+    assert other_team_org_response.status_code == 201
+    other_team_org_id = other_team_org_response.json()["id"]
+    peer_task_response = client.post(
+        "/api/tasks",
+        headers=admin_headers,
+        json={
+            "organization_id": peer_org_id,
+            "major_task": "관리 팀장 범위 대업무",
+            "detail_task": "팀장 할당 사용자가 다른 그룹 업무를 조회한다.",
+        },
+    )
+    assert peer_task_response.status_code == 201
+    other_task_response = client.post(
+        "/api/tasks",
+        headers=admin_headers,
+        json={
+            "organization_id": other_team_org_id,
+            "major_task": "관리 팀장 제외 대업무",
+            "detail_task": "같은 팀장 ID지만 팀명이 다른 업무는 제외한다.",
+        },
+    )
+    assert other_task_response.status_code == 201
+    create_user_response = client.post(
+        "/api/admin/users",
+        headers=admin_headers,
+        json={
+            "employee_id": managed_employee_id,
+            "name": "관리팀권한팀장",
+            "role": "APPROVER",
+            "organization_id": first_org_id,
+        },
+    )
+    assert create_user_response.status_code == 201
+
+    try:
+        orgs_response = client.get("/api/organizations", headers={"X-Employee-Id": managed_employee_id})
+        peer_tasks_response = client.get(
+            f"/api/tasks?org_id={peer_org_id}",
+            headers={"X-Employee-Id": managed_employee_id},
+        )
+        other_tasks_response = client.get(
+            f"/api/tasks?org_id={other_team_org_id}",
+            headers={"X-Employee-Id": managed_employee_id},
+        )
+        group_tasks_response = client.get("/api/tasks/group", headers={"X-Employee-Id": managed_employee_id})
+
+        assert orgs_response.status_code == 200
+        organization_ids = {item["id"] for item in orgs_response.json()}
+        assert first_org_id in organization_ids
+        assert peer_org_id in organization_ids
+        assert other_team_org_id not in organization_ids
+        assert peer_tasks_response.status_code == 200
+        assert other_tasks_response.status_code == 403
+        group_task_org_ids = {item["organization_id"] for item in group_tasks_response.json()}
+        assert peer_org_id in group_task_org_ids
+        assert other_team_org_id not in group_task_org_ids
+    finally:
+        client.delete(f"/api/admin/users/{managed_employee_id}", headers=admin_headers)
+        client.delete(f"/api/tasks/{other_task_response.json()['id']}", headers=admin_headers)
+        client.delete(f"/api/tasks/{peer_task_response.json()['id']}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{other_team_org_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{peer_org_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{first_org_id}", headers=admin_headers)
+
+
 def test_managed_approver_anchor_part_does_not_grant_part_writer_permissions():
     client = TestClient(app)
     admin_headers = {"X-Employee-Id": "admin001"}

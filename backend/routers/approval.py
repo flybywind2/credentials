@@ -266,6 +266,69 @@ def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
     }
 
 
+def _same_scope_values(scope_id: str | None, scope_name: str | None, org_id: str | None, org_name: str | None) -> bool:
+    if scope_id and scope_name:
+        return org_id == scope_id and org_name == scope_name
+    if scope_id:
+        return org_id == scope_id
+    return bool(scope_name and org_name == scope_name)
+
+
+def _approval_role_for_user(user: dict) -> str | None:
+    current_org = user.get("organization") or {}
+    employee_id = user["employee_id"]
+    if current_org.get("group_head_id") == employee_id:
+        return "그룹장"
+    if current_org.get("team_head_id") == employee_id:
+        return "팀장"
+    if current_org.get("division_head_id") == employee_id:
+        return "실장"
+    if user.get("managed"):
+        return "그룹장"
+    return None
+
+
+def _matches_step_scope(user: dict, org: Organization | None, step: ApprovalStep) -> bool:
+    if org is None:
+        return False
+    current_org = user.get("organization") or {}
+    role = _approval_role_for_user(user)
+    if role != step.approver_role:
+        return False
+    if role == "그룹장":
+        return _same_scope_values(
+            current_org.get("group_head_id"),
+            current_org.get("group_name"),
+            org.group_head_id,
+            org.group_name,
+        )
+    if role == "팀장":
+        return _same_scope_values(
+            current_org.get("team_head_id"),
+            current_org.get("team_name"),
+            org.team_head_id,
+            org.team_name,
+        )
+    if role == "실장":
+        return _same_scope_values(
+            current_org.get("division_head_id"),
+            current_org.get("division_name"),
+            org.division_head_id,
+            org.division_name,
+        )
+    return False
+
+
+def _can_act_on_step(user: dict, request: ApprovalRequest, step: ApprovalStep, db: Session) -> bool:
+    if user["role"] == "ADMIN":
+        return True
+    if user["employee_id"] == step.approver_employee_id:
+        return True
+    if user["role"] != "APPROVER":
+        return False
+    return _matches_step_scope(user, db.get(Organization, request.organization_id), step)
+
+
 def _submission_errors(tasks: list[TaskEntry]) -> list[dict]:
     errors = []
     for task in tasks:
@@ -312,11 +375,11 @@ def list_pending_approvals(
         .where(ApprovalStep.status == "PENDING")
         .where(ApprovalStep.step_order == ApprovalRequest.current_step)
     )
-    if user["role"] != "ADMIN":
-        query = query.where(ApprovalStep.approver_employee_id == user["employee_id"])
 
     rows = []
     for request, step in db.execute(query).all():
+        if not _can_act_on_step(user, request, step, db):
+            continue
         org = db.get(Organization, request.organization_id)
         requester = db.get(User, request.requested_by)
         task_count = db.scalar(
@@ -408,10 +471,8 @@ def _current_step(db: Session, request: ApprovalRequest) -> ApprovalStep:
     return step
 
 
-def _ensure_can_act(user: dict, step: ApprovalStep) -> None:
-    if user["role"] == "ADMIN":
-        return
-    if user["employee_id"] == step.approver_employee_id:
+def _ensure_can_act(user: dict, request: ApprovalRequest, step: ApprovalStep, db: Session) -> None:
+    if _can_act_on_step(user, request, step, db):
         return
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -484,7 +545,7 @@ def approve_request(
         raise HTTPException(status_code=400, detail="Approval request is not pending")
 
     step = _current_step(db, request)
-    _ensure_can_act(user, step)
+    _ensure_can_act(user, request, step, db)
     _record_task_reviews(db, request, step, user, payload.task_reviews if payload else [], "approve")
     step.status = "APPROVED"
     step.acted_at = datetime.now(timezone.utc)
@@ -563,7 +624,7 @@ def reject_request(
         raise HTTPException(status_code=400, detail="Approval request is not pending")
 
     step = _current_step(db, request)
-    _ensure_can_act(user, step)
+    _ensure_can_act(user, request, step, db)
     _record_task_reviews(db, request, step, user, payload.task_reviews, "reject")
     step.status = "REJECTED"
     step.reject_reason = payload.reject_reason

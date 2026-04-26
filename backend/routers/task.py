@@ -536,23 +536,7 @@ def list_same_group_tasks(
 ):
     if user["role"] == "INPUTTER":
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    current_org = db.get(Organization, user["organization_id"])
-    if current_org is None:
-        return []
-    query = select(TaskEntry).join(Organization, Organization.id == TaskEntry.organization_id)
-    if user["role"] == "ADMIN":
-        pass
-    else:
-        condition = _scope_condition(
-            Organization.group_head_id,
-            Organization.group_name,
-            current_org.group_head_id,
-            current_org.group_name,
-        )
-        if condition is not None:
-            query = query.where(condition)
-        else:
-            query = query.where(TaskEntry.organization_id == current_org.id)
+    query = _readable_task_query(user, db)
     return [_serialize_task(db, task) for task in db.scalars(query).all()]
 
 

@@ -132,6 +132,34 @@ test("editableOrganizationsForUser uses assigned group scope for managed approve
   );
 });
 
+test("editableOrganizationsForUser uses team scope for managed team approvers", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "team001",
+    managed: true,
+    organization_id: 20,
+    organization: {
+      id: 20,
+      team_head_id: "team001",
+      team_name: "정보전략팀",
+      group_head_id: "group001",
+      group_name: "AI/IT전략그룹",
+      part_name: "전략기획파트",
+    },
+  };
+  const organizations = [
+    { id: 20, team_head_id: "team001", team_name: "정보전략팀", group_head_id: "group001", group_name: "AI/IT전략그룹", part_name: "전략기획파트" },
+    { id: 21, team_head_id: "team001", team_name: "정보전략팀", group_head_id: "group002", group_name: "생성형AI그룹", part_name: "AI개발파트" },
+    { id: 22, team_head_id: "team001", team_name: "다른팀", group_head_id: "group003", group_name: "동명이인그룹", part_name: "제외파트" },
+    { id: 23, team_head_id: "team999", team_name: "정보전략팀", group_head_id: "group004", group_name: "타팀그룹", part_name: "제외파트" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [20, 21],
+  );
+});
+
 test("selectedEditableOrganization accepts selected subordinate part and falls back to current org", () => {
   const user = {
     role: "APPROVER",

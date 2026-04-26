@@ -2,7 +2,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from backend.database import SessionLocal
 from backend.main import app
+from backend.models import TaskEntry
 
 
 def _create_test_org(
@@ -516,6 +518,37 @@ def test_inputter_cannot_delete_task_created_by_another_user_in_own_org():
         assert response.status_code == 403
         tasks = client.get("/api/tasks?org_id=1", headers={"X-Employee-Id": "admin001"}).json()
         assert any(task["id"] == created["id"] for task in tasks)
+    finally:
+        client.delete(f"/api/tasks/{created['id']}", headers={"X-Employee-Id": "admin001"})
+
+
+def test_inputter_can_delete_rejected_task_created_by_another_user_in_own_org():
+    client = TestClient(app)
+    created = client.post(
+        "/api/tasks",
+        json={
+            "organization_id": 1,
+            "major_task": "반려 삭제 대업무",
+            "detail_task": "반려 삭제 세부업무",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+    with SessionLocal() as db:
+        task = db.get(TaskEntry, created["id"])
+        task.status = "REJECTED"
+        db.commit()
+
+    try:
+        response = client.delete(
+            f"/api/tasks/{created['id']}",
+            headers={"X-Employee-Id": "part001"},
+        )
+
+        assert response.status_code == 204
+        tasks = client.get("/api/tasks?org_id=1", headers={"X-Employee-Id": "admin001"}).json()
+        assert all(task["id"] != created["id"] for task in tasks)
     finally:
         client.delete(f"/api/tasks/{created['id']}", headers={"X-Employee-Id": "admin001"})
 

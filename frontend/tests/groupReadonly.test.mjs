@@ -28,3 +28,9 @@ test("group readonly view renders pagination controls", () => {
   assert.match(source, /data-group-pagination/);
   assert.match(source, /renderPaginationControls\(page,\s*"group-readonly"\)/);
 });
+
+test("group readonly view renders classification applicable donut from all group tasks", () => {
+  assert.match(source, /classificationSummaryFromTasks\(tasks\)/);
+  assert.match(source, /renderClassificationDonut/);
+  assert.match(source, /해당\/미해당 비율/);
+});

@@ -13,3 +13,17 @@ test("part status page renders part members as a read-only list", () => {
   assert.doesNotMatch(partStatusSource, /type="file"/);
   assert.doesNotMatch(partStatusSource, /text\/csv/);
 });
+
+test("part status page lets approvers choose a subordinate part scope", () => {
+  assert.match(partStatusSource, /진행 현황/);
+  assert.match(partStatusSource, /renderClassificationDonut/);
+  assert.match(partStatusSource, /classification_summary/);
+  assert.match(partStatusSource, /\/api\/organizations/);
+  assert.match(partStatusSource, /editableOrganizationsForUser/);
+  assert.match(partStatusSource, /selectedEditableOrganization/);
+  assert.match(partStatusSource, /data-action="select-status-org"/);
+  assert.match(partStatusSource, /\/api\/tasks\/status\?org_id=\$\{orgId\}/);
+  assert.match(partStatusSource, /\/api\/tasks\/rejection\?org_id=\$\{orgId\}/);
+  assert.match(partStatusSource, /loadReadablePartMembers\(fetchJson, orgId\)/);
+  assert.match(partStatusSource, /renderPartStatus\(container, \{ \.\.\.options, selectedOrgId/);
+});

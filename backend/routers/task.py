@@ -251,6 +251,27 @@ def _readable_task_query(user: dict, db: Session):
     return query.where(TaskEntry.organization_id == user["organization_id"])
 
 
+def _classification_summary_for_org(db: Session, org_id: int) -> dict:
+    rows = db.execute(
+        select(
+            TaskEntry.is_confidential,
+            TaskEntry.is_national_tech,
+            TaskEntry.is_compliance,
+        ).where(TaskEntry.organization_id == org_id)
+    ).all()
+    applicable = sum(
+        1
+        for is_confidential, is_national_tech, is_compliance in rows
+        if is_confidential or is_national_tech or is_compliance
+    )
+    total = len(rows)
+    return {
+        "total": total,
+        "applicable": applicable,
+        "not_applicable": total - applicable,
+    }
+
+
 def _normalize_answers(answers: list[QuestionAnswerInput] | None) -> list[TaskQuestionAnswer]:
     normalized = []
     for index, answer in enumerate(answers or [], start=1):
@@ -587,6 +608,7 @@ def read_part_status(
         "organization_id": target_org_id,
         "total_tasks": sum(counts.values()),
         "status_counts": counts,
+        "classification_summary": _classification_summary_for_org(db, target_org_id),
         "approval_id": latest_request.id if latest_request else None,
         "approval_status": latest_request.status if latest_request else "NOT_REQUESTED",
         "approval_requester_employee_id": latest_requester.employee_id if latest_requester else None,
@@ -884,7 +906,9 @@ def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
     ensure_can_write_org(user, task.organization_id, db)
     creator = db.get(User, task.created_by)
-    if user["role"] != "ADMIN" and (creator is None or creator.employee_id != user["employee_id"]):
+    is_creator = creator is not None and creator.employee_id == user["employee_id"]
+    can_delete_rejected = user["role"] == "INPUTTER" and task.status == "REJECTED"
+    if user["role"] != "ADMIN" and not is_creator and not can_delete_rejected:
         raise HTTPException(status_code=403, detail="Only the creator can delete this task")
     db.execute(delete(ApprovalTaskReview).where(ApprovalTaskReview.task_entry_id == task_id))
     db.execute(delete(TaskAssignee).where(TaskAssignee.task_entry_id == task_id))

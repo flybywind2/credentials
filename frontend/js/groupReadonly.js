@@ -1,4 +1,8 @@
 import { fetchJson } from "./api.js?v=20260426-mock-cookie";
+import {
+  classificationSummaryFromTasks,
+  renderClassificationDonut,
+} from "./classificationChart.js?v=20260426-classification-donut";
 import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 
 function escapeHtml(value) {
@@ -31,6 +35,7 @@ export function renderGroupRows(tasks, startIndex = 0) {
 
 export async function renderGroupReadonly(container) {
   const tasks = await fetchJson("/api/tasks/group");
+  const classificationSummary = classificationSummaryFromTasks(tasks);
   let currentPage = 1;
 
   function updateRows() {
@@ -51,6 +56,7 @@ export async function renderGroupReadonly(container) {
           <p>같은 그룹의 파트 업무를 읽기 전용으로 확인합니다.</p>
         </div>
       </div>
+      ${renderClassificationDonut(classificationSummary, "해당/미해당 비율")}
       <div class="table-wrap">
         <table class="data-table">
           <thead>

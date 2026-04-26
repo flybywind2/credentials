@@ -651,6 +651,67 @@ body {
   border-top: 1px solid var(--line);
 }
 
+.classification-donut-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+}
+
+.classification-donut {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 116px;
+  height: 116px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.classification-donut-center {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(222 215 234 / 70%);
+}
+
+.classification-donut-center strong {
+  color: var(--accent-ink);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.classification-donut-center span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.classification-donut-copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.classification-donut-copy h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.legend-dot.classification-applicable {
+  background: var(--accent);
+}
+
+.legend-dot.classification-not-applicable {
+  background: #d9dce8;
+}
+
 .approval-donut {
   position: relative;
   width: 120px;

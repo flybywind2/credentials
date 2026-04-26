@@ -1,6 +1,12 @@
 import { fetchJson } from "./api.js?v=20260426-mock-cookie";
+import { renderClassificationDonut } from "./classificationChart.js?v=20260426-classification-donut";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { loadReadablePartMembers } from "./partMembers.js?v=20260426-mock-cookie";
+import {
+  editableOrganizationsForUser,
+  orgPathOfOrganization,
+  selectedEditableOrganization,
+} from "./spreadsheet.js?v=20260426-status-part";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -30,26 +36,56 @@ function memberRows(members) {
   `).join("");
 }
 
-export async function renderPartStatus(container) {
-  const [currentUser, deadline, status, rejection, members] = await Promise.all([
-    fetchJson("/api/auth/me"),
+function renderStatusOrganizationSelector(organizations, selectedOrganization) {
+  if (organizations.length <= 1) {
+    return "";
+  }
+  return `
+    <label class="work-org-selector">하위파트
+      <select data-action="select-status-org" aria-label="하위파트 선택">
+        ${organizations.map((organization) => `
+          <option value="${organization.id}" ${Number(organization.id) === Number(selectedOrganization.id) ? "selected" : ""}>
+            ${escapeHtml(orgPathOfOrganization(organization))}
+          </option>
+        `).join("")}
+      </select>
+    </label>
+  `;
+}
+
+export async function renderPartStatus(container, options = {}) {
+  const currentUser = await fetchJson("/api/auth/me");
+  const organizations = ["APPROVER", "ADMIN"].includes(currentUser.role)
+    ? await fetchJson("/api/organizations")
+    : [currentUser.organization].filter(Boolean);
+  const editableOrganizations = editableOrganizationsForUser(currentUser, organizations);
+  const selectedOrganization = selectedEditableOrganization(
+    currentUser,
+    organizations,
+    options.selectedOrgId,
+  );
+  const orgId = Number(selectedOrganization.id || currentUser.organization_id || currentUser.organization?.id || 1);
+  const [deadline, status, rejection, members] = await Promise.all([
     fetchJson("/api/settings/deadline"),
-    fetchJson("/api/tasks/status"),
-    fetchJson("/api/tasks/rejection"),
-    loadReadablePartMembers(fetchJson),
+    fetchJson(`/api/tasks/status?org_id=${orgId}`),
+    fetchJson(`/api/tasks/rejection?org_id=${orgId}`),
+    loadReadablePartMembers(fetchJson, orgId),
   ]);
-  const org = currentUser.organization || {};
   container.innerHTML = `
     <section class="workspace">
       <div class="section-header">
         <div>
-          <h2>내 파트 현황</h2>
-          <p>${escapeHtml([org.division_name, org.team_name, org.group_name, org.part_name].filter(Boolean).join(" > "))}</p>
+          <h2>진행 현황</h2>
+          <p>${escapeHtml(orgPathOfOrganization(selectedOrganization))}</p>
         </div>
-        <span class="badge ${deadline.is_closed ? "danger" : "status"}">${formatDday(deadline)}</span>
+        <div class="toolbar">
+          ${renderStatusOrganizationSelector(editableOrganizations, selectedOrganization)}
+          <span class="badge ${deadline.is_closed ? "danger" : "status"}">${formatDday(deadline)}</span>
+        </div>
       </div>
       ${deadline.description ? `<div class="alert-banner"><strong>마감 안내</strong><span>${escapeHtml(deadline.description)}</span></div>` : ""}
       ${rejection.has_rejection ? `<div class="alert-banner danger"><strong>반려 사유</strong><span>${escapeHtml(rejection.reject_reason)}</span></div>` : ""}
+      ${renderClassificationDonut(status.classification_summary)}
       <div class="metric-grid status-metric-grid">
         <div class="metric"><span>전체</span><strong>${status.total_tasks}</strong></div>
         ${statusRows(status.status_counts)}
@@ -76,4 +112,7 @@ export async function renderPartStatus(container) {
       </section>
     </section>
   `;
+  container.querySelector("[data-action='select-status-org']")?.addEventListener("change", async (event) => {
+    await renderPartStatus(container, { ...options, selectedOrgId: Number(event.target.value) });
+  });
 }

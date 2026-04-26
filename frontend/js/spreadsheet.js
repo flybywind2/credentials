@@ -59,7 +59,7 @@ function orgPathOf(user) {
   return orgPathOfOrganization(user?.organization);
 }
 
-function orgPathOfOrganization(organization = {}) {
+export function orgPathOfOrganization(organization = {}) {
   return [
     organization.division_name,
     organization.team_name,
@@ -757,7 +757,11 @@ export function canDeleteTask(task, user) {
   if (!task || !user) {
     return false;
   }
-  return user.role === "ADMIN" || task.created_by_employee_id === user.employee_id;
+  return (
+    user.role === "ADMIN"
+    || task.created_by_employee_id === user.employee_id
+    || (user.role === "INPUTTER" && task.status === "REJECTED")
+  );
 }
 
 export async function renderSpreadsheet(container, options = {}) {

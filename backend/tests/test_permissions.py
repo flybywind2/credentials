@@ -361,6 +361,101 @@ def test_group_scope_does_not_expand_for_task_or_member_apis_when_group_name_is_
         client.delete(f"/api/admin/organizations/{first_org_id}", headers=admin_headers)
 
 
+def test_upper_approver_menus_keep_manager_scope_when_also_part_head_elsewhere():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    created_org_ids: list[int] = []
+    created_task_ids: list[int] = []
+
+    def create_org(employee_id: str, level: str, suffix: str, outside: bool = False) -> int:
+        label = f"상위메뉴{level}{suffix}"
+        payload = {
+            "division_name": f"{label}실",
+            "division_head_name": f"{label}실장",
+            "division_head_id": employee_id if level == "division" and not outside else f"{label}-div",
+            "team_name": f"{label}팀",
+            "team_head_name": f"{label}팀장",
+            "team_head_id": employee_id if level == "team" and not outside else f"{label}-team",
+            "group_name": f"{label}그룹",
+            "group_head_name": f"{label}그룹장",
+            "group_head_id": employee_id if level == "group" and not outside else f"{label}-group",
+            "part_name": f"{label}파트",
+            "part_head_name": f"{label}파트장",
+            "part_head_id": employee_id if outside else f"{label}-part",
+            "org_type": "NORMAL",
+        }
+        if not outside and suffix == "B":
+            if level == "group":
+                payload["group_name"] = f"상위메뉴{level}A그룹"
+            if level == "team":
+                payload["team_name"] = f"상위메뉴{level}A팀"
+            if level == "division":
+                payload["division_name"] = f"상위메뉴{level}A실"
+        response = client.post("/api/admin/organizations", headers=admin_headers, json=payload)
+        assert response.status_code == 201
+        org_id = response.json()["id"]
+        created_org_ids.append(org_id)
+        return org_id
+
+    try:
+        for level in ("group", "team", "division"):
+            employee_id = f"upper-menu-{level}-{uuid4().hex[:8]}"
+            base_org_id = create_org(employee_id, level, "A")
+            peer_org_id = create_org(employee_id, level, "B")
+            outside_part_org_id = create_org(employee_id, level, "X", outside=True)
+            task_response = client.post(
+                "/api/tasks",
+                headers=admin_headers,
+                json={
+                    "organization_id": peer_org_id,
+                    "major_task": f"{level} 하위메뉴 대업무",
+                    "detail_task": f"{level} 하위메뉴 세부업무",
+                    "confidential_answers": [["해당 없음"]],
+                    "national_tech_answers": [["해당 없음"]],
+                },
+            )
+            assert task_response.status_code == 201
+            task_id = task_response.json()["id"]
+            created_task_ids.append(task_id)
+
+            headers = {"X-Employee-Id": employee_id}
+            me_response = client.get("/api/auth/me", headers=headers)
+            orgs_response = client.get("/api/organizations", headers=headers)
+            tasks_response = client.get(f"/api/tasks?org_id={peer_org_id}", headers=headers)
+            status_response = client.get(f"/api/tasks/status?org_id={peer_org_id}", headers=headers)
+            members_response = client.get(f"/api/part-members?org_id={peer_org_id}", headers=headers)
+            group_tasks_response = client.get("/api/tasks/group", headers=headers)
+            subordinate_response = client.get("/api/approvals/subordinate-status", headers=headers)
+
+            assert me_response.status_code == 200
+            assert me_response.json()["role"] == "APPROVER"
+            assert me_response.json()["organization"]["id"] == base_org_id
+            assert orgs_response.status_code == 200
+            organization_ids = {item["id"] for item in orgs_response.json()}
+            assert base_org_id in organization_ids
+            assert peer_org_id in organization_ids
+            assert outside_part_org_id not in organization_ids
+            assert tasks_response.status_code == 200
+            assert status_response.status_code == 200
+            assert members_response.status_code == 200
+            assert group_tasks_response.status_code == 200
+            assert task_id in {item["id"] for item in group_tasks_response.json()}
+            assert subordinate_response.status_code == 200
+            subordinate_org_ids = {
+                org_id
+                for row in subordinate_response.json()["rows"]
+                for org_id in row["organization_ids"]
+            }
+            assert base_org_id in subordinate_org_ids
+            assert peer_org_id in subordinate_org_ids
+            assert outside_part_org_id not in subordinate_org_ids
+    finally:
+        for task_id in reversed(created_task_ids):
+            client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        for org_id in reversed(created_org_ids):
+            client.delete(f"/api/admin/organizations/{org_id}", headers=admin_headers)
+
+
 def test_managed_approver_org_assignment_overrides_org_head_auto_scope():
     client = TestClient(app)
     admin_headers = {"X-Employee-Id": "admin001"}

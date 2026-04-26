@@ -152,25 +152,37 @@ def _resolve_org_head(
     if not organizations:
         return None
 
-    approver_org = next(
-        (
-            org
-            for org in organizations
-            if employee_id in {org.group_head_id, org.team_head_id, org.division_head_id}
-        ),
-        None,
-    )
+    def approver_level(org: Organization | None) -> int:
+        if org is None:
+            return 0
+        if org.division_head_id == employee_id:
+            return 3
+        if org.team_head_id == employee_id:
+            return 2
+        if org.group_head_id == employee_id:
+            return 1
+        return 0
+
+    approver_orgs = [org for org in organizations if approver_level(org) > 0]
+    approver_org = max(approver_orgs, key=approver_level) if approver_orgs else None
     own_part_org = next((org for org in organizations if org.part_head_id == employee_id), None)
-    org = own_part_org or approver_org or organizations[0]
+    approver_org_level = approver_level(approver_org)
+    use_own_part_anchor = (
+        own_part_org is not None
+        and approver_org_level > 0
+        and approver_level(own_part_org) == approver_org_level
+    )
+    org = own_part_org if use_own_part_anchor else approver_org or own_part_org or organizations[0]
 
     if approver_org is not None:
         role = "APPROVER"
-        if approver_org.group_head_id == employee_id:
-            name = approver_org.group_head_name or employee_id
-        elif approver_org.team_head_id == employee_id:
-            name = approver_org.team_head_name or employee_id
+        role_org = org if approver_level(org) > 0 else approver_org
+        if approver_level(role_org) == 1:
+            name = role_org.group_head_name or employee_id
+        elif approver_level(role_org) == 2:
+            name = role_org.team_head_name or employee_id
         else:
-            name = approver_org.division_head_name
+            name = role_org.division_head_name or employee_id
     else:
         role = "INPUTTER"
         name = org.part_head_name

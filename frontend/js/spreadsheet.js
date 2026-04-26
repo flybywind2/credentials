@@ -706,11 +706,11 @@ export function filterRejectedTasks(tasks, rejection) {
   const rejectedTaskIds = new Set((rejection?.task_reviews || [])
     .filter((review) => review.decision === "REJECTED")
     .map((review) => Number(review.task_id)));
-  return tasks.filter((task) => rejectedTaskIds.has(Number(task.id)));
+  return tasks.filter((task) => task.status === "REJECTED" && rejectedTaskIds.has(Number(task.id)));
 }
 
 export function isRejectedTask(task, rejection) {
-  return (rejection?.task_reviews || []).some((review) => (
+  return task?.status === "REJECTED" && (rejection?.task_reviews || []).some((review) => (
     Number(review.task_id) === Number(task.id) && review.decision === "REJECTED"
   ));
 }

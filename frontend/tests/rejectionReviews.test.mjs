@@ -40,7 +40,11 @@ test("hasRejectedTaskReviews detects rejected task review entries", () => {
 });
 
 test("filterRejectedTasks keeps only tasks rejected by item review", () => {
-  const tasks = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  const tasks = [
+    { id: 1, status: "SUBMITTED" },
+    { id: 2, status: "REJECTED" },
+    { id: 3, status: "DRAFT" },
+  ];
   const rejection = {
     task_reviews: [
       { task_id: 1, decision: "APPROVED" },
@@ -48,11 +52,27 @@ test("filterRejectedTasks keeps only tasks rejected by item review", () => {
     ],
   };
 
-  assert.deepEqual(filterRejectedTasks(tasks, rejection), [{ id: 2 }]);
+  assert.deepEqual(filterRejectedTasks(tasks, rejection), [{ id: 2, status: "REJECTED" }]);
+});
+
+test("filterRejectedTasks ignores stale rejected reviews after task status is cleared", () => {
+  const tasks = [{ id: 2, status: "DRAFT" }];
+  const rejection = {
+    task_reviews: [
+      { task_id: 2, decision: "REJECTED" },
+    ],
+  };
+
+  assert.deepEqual(filterRejectedTasks(tasks, rejection), []);
 });
 
 test("prioritizeRejectedTasks moves rejected tasks to the top and preserves group order", () => {
-  const tasks = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+  const tasks = [
+    { id: 1, status: "REJECTED" },
+    { id: 2, status: "SUBMITTED" },
+    { id: 3, status: "REJECTED" },
+    { id: 4, status: "DRAFT" },
+  ];
   const rejection = {
     task_reviews: [
       { task_id: 3, decision: "REJECTED" },
@@ -67,8 +87,9 @@ test("prioritizeRejectedTasks moves rejected tasks to the top and preserves grou
 test("isRejectedTask identifies rows that need highlight", () => {
   const rejection = { task_reviews: [{ task_id: 7, decision: "REJECTED" }] };
 
-  assert.equal(isRejectedTask({ id: 7 }, rejection), true);
-  assert.equal(isRejectedTask({ id: 8 }, rejection), false);
+  assert.equal(isRejectedTask({ id: 7, status: "REJECTED" }, rejection), true);
+  assert.equal(isRejectedTask({ id: 7, status: "DRAFT" }, rejection), false);
+  assert.equal(isRejectedTask({ id: 8, status: "REJECTED" }, rejection), false);
 });
 
 test("spreadsheet updates the task table body explicitly when rejection review tables exist", () => {

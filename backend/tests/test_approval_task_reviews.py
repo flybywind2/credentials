@@ -139,6 +139,82 @@ def test_latest_rejection_exposes_per_task_review_comments_to_inputter():
         client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
 
 
+def test_latest_rejection_is_hidden_when_no_current_task_is_rejected():
+    client = TestClient(app)
+    org, task, approval = _create_div_direct_submission(client, "cleared")
+
+    try:
+        reject = client.post(
+            f"/api/approvals/{approval['id']}/reject",
+            json={
+                "reject_reason": "상태 해제 반려",
+                "task_reviews": [
+                    {
+                        "task_id": task["id"],
+                        "decision": "REJECTED",
+                        "comment": "상태가 해제되면 숨김",
+                    }
+                ],
+            },
+            headers={"X-Employee-Id": "div001"},
+        )
+        assert reject.status_code == 200
+        update = client.put(
+            f"/api/tasks/{task['id']}",
+            json={"status": "DRAFT"},
+            headers={"X-Employee-Id": "admin001"},
+        )
+        assert update.status_code == 200
+
+        response = client.get(
+            f"/api/tasks/rejection?org_id={org['id']}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"has_rejection": False, "reject_reason": None}
+    finally:
+        client.delete(f"/api/tasks/{task['id']}", headers={"X-Employee-Id": "admin001"})
+        client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
+
+
+def test_latest_rejection_is_hidden_when_rejected_task_is_deleted():
+    client = TestClient(app)
+    org, task, approval = _create_div_direct_submission(client, "deleted")
+
+    try:
+        reject = client.post(
+            f"/api/approvals/{approval['id']}/reject",
+            json={
+                "reject_reason": "삭제된 반려",
+                "task_reviews": [
+                    {
+                        "task_id": task["id"],
+                        "decision": "REJECTED",
+                        "comment": "삭제되면 숨김",
+                    }
+                ],
+            },
+            headers={"X-Employee-Id": "div001"},
+        )
+        assert reject.status_code == 200
+        delete = client.delete(
+            f"/api/tasks/{task['id']}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+        assert delete.status_code == 204
+
+        response = client.get(
+            f"/api/tasks/rejection?org_id={org['id']}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"has_rejection": False, "reject_reason": None}
+    finally:
+        client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
+
+
 def test_partial_task_rejection_keeps_approved_items_submitted():
     client = TestClient(app)
     org = client.post(

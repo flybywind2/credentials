@@ -420,12 +420,22 @@ def _sync_task_assignees(db: Session, task: TaskEntry, knox_ids: list[str] | Non
         )
 
 
-def _serialize_rejection_reviews(db: Session, approval_request_id: int) -> list[dict]:
-    reviews = db.scalars(
+def _serialize_rejection_reviews(
+    db: Session,
+    approval_request_id: int,
+    rejected_task_ids: set[int] | None = None,
+) -> list[dict]:
+    query = (
         select(ApprovalTaskReview)
         .where(ApprovalTaskReview.approval_request_id == approval_request_id)
+        .where(ApprovalTaskReview.decision == "REJECTED")
         .order_by(ApprovalTaskReview.id)
-    ).all()
+    )
+    if rejected_task_ids is not None:
+        if not rejected_task_ids:
+            return []
+        query = query.where(ApprovalTaskReview.task_entry_id.in_(rejected_task_ids))
+    reviews = db.scalars(query).all()
     rows = []
     for review in reviews:
         task = db.get(TaskEntry, review.task_entry_id)
@@ -644,22 +654,40 @@ def read_latest_rejection(
 ):
     target_org_id = org_id or user["organization_id"]
     _ensure_can_read_task_org(user, target_org_id, db)
-    request = db.scalar(
+    rejected_task_ids = set(
+        db.scalars(
+            select(TaskEntry.id)
+            .where(TaskEntry.organization_id == target_org_id)
+            .where(TaskEntry.status == "REJECTED")
+        ).all()
+    )
+    if not rejected_task_ids:
+        return {"has_rejection": False, "reject_reason": None}
+
+    requests = db.scalars(
         select(ApprovalRequest)
         .where(ApprovalRequest.organization_id == target_org_id)
         .where(ApprovalRequest.status == "REJECTED")
         .where(ApprovalRequest.reject_reason.is_not(None))
         .order_by(ApprovalRequest.updated_at.desc(), ApprovalRequest.id.desc())
-        .limit(1)
-    )
-    if request is None:
+    ).all()
+    for request in requests:
+        review_count = db.scalar(
+            select(func.count(ApprovalTaskReview.id))
+            .where(ApprovalTaskReview.approval_request_id == request.id)
+        )
+        task_reviews = _serialize_rejection_reviews(db, request.id, rejected_task_ids)
+        if review_count and not task_reviews:
+            continue
+        return {
+            "has_rejection": True,
+            "approval_id": request.id,
+            "reject_reason": request.reject_reason,
+            "task_reviews": task_reviews,
+        }
+    if not requests:
         return {"has_rejection": False, "reject_reason": None}
-    return {
-        "has_rejection": True,
-        "approval_id": request.id,
-        "reject_reason": request.reject_reason,
-        "task_reviews": _serialize_rejection_reviews(db, request.id),
-    }
+    return {"has_rejection": False, "reject_reason": None}
 
 
 @router.get("/template")

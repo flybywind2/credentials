@@ -1,4 +1,4 @@
-import { currentAccessToken, currentEmployeeId, fetchJson } from "./api.js";
+import { currentAccessToken, currentEmployeeId, fetchJson } from "./api.js?v=20260426-mock-session";
 import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 
 function escapeHtml(value) {

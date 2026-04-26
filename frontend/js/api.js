@@ -1,19 +1,22 @@
 export const ACCESS_TOKEN_STORAGE_KEY = "credential_access_token";
+export const EMPLOYEE_STORAGE_KEY = "credential_employee_id";
 
-export function currentEmployeeId() {
+function storageValue(storage, key) {
   try {
-    return globalThis.localStorage?.getItem("credential_employee_id") || "";
+    return storage?.getItem(key) || "";
   } catch {
     return "";
   }
 }
 
+export function currentEmployeeId() {
+  return storageValue(globalThis.sessionStorage, EMPLOYEE_STORAGE_KEY)
+    || storageValue(globalThis.localStorage, EMPLOYEE_STORAGE_KEY);
+}
+
 export function currentAccessToken() {
-  try {
-    return globalThis.localStorage?.getItem(ACCESS_TOKEN_STORAGE_KEY) || "";
-  } catch {
-    return "";
-  }
+  return storageValue(globalThis.sessionStorage, ACCESS_TOKEN_STORAGE_KEY)
+    || storageValue(globalThis.localStorage, ACCESS_TOKEN_STORAGE_KEY);
 }
 
 export async function fetchJson(path, options = {}) {

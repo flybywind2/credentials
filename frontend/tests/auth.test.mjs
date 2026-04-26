@@ -9,16 +9,27 @@ import {
 } from "../js/auth.js";
 
 test("loginWithEmployeeId stores access token and employee id", async () => {
-  const storedValues = {};
-  const previousStorage = globalThis.localStorage;
+  const localValues = {};
+  const sessionValues = {};
+  const previousLocalStorage = globalThis.localStorage;
+  const previousSessionStorage = globalThis.sessionStorage;
   const previousFetch = globalThis.fetch;
   globalThis.localStorage = {
-    getItem: (key) => storedValues[key] || "",
+    getItem: (key) => localValues[key] || "",
     setItem: (key, value) => {
-      storedValues[key] = value;
+      localValues[key] = value;
     },
     removeItem: (key) => {
-      delete storedValues[key];
+      delete localValues[key];
+    },
+  };
+  globalThis.sessionStorage = {
+    getItem: (key) => sessionValues[key] || "",
+    setItem: (key, value) => {
+      sessionValues[key] = value;
+    },
+    removeItem: (key) => {
+      delete sessionValues[key];
     },
   };
   globalThis.fetch = async (_path, options) => {
@@ -37,14 +48,19 @@ test("loginWithEmployeeId stores access token and employee id", async () => {
     const user = await loginWithEmployeeId("part001", "secret");
 
     assert.equal(user.employee_id, "part001");
-    assert.equal(storedValues[EMPLOYEE_STORAGE_KEY], "part001");
-    assert.equal(storedValues[TOKEN_STORAGE_KEY], "signed-token");
+    assert.equal(localValues[EMPLOYEE_STORAGE_KEY], "part001");
+    assert.equal(localValues[TOKEN_STORAGE_KEY], "signed-token");
+    assert.equal(sessionValues[EMPLOYEE_STORAGE_KEY], "part001");
+    assert.equal(sessionValues[TOKEN_STORAGE_KEY], "signed-token");
 
     clearEmployeeId();
-    assert.equal(storedValues[EMPLOYEE_STORAGE_KEY], undefined);
-    assert.equal(storedValues[TOKEN_STORAGE_KEY], undefined);
+    assert.equal(localValues[EMPLOYEE_STORAGE_KEY], undefined);
+    assert.equal(localValues[TOKEN_STORAGE_KEY], undefined);
+    assert.equal(sessionValues[EMPLOYEE_STORAGE_KEY], undefined);
+    assert.equal(sessionValues[TOKEN_STORAGE_KEY], undefined);
   } finally {
     globalThis.fetch = previousFetch;
-    globalThis.localStorage = previousStorage;
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.sessionStorage = previousSessionStorage;
   }
 });

@@ -1,47 +1,57 @@
-import { fetchJson } from "./api.js";
+import { fetchJson } from "./api.js?v=20260426-mock-session";
 
 export const EMPLOYEE_STORAGE_KEY = "credential_employee_id";
 export const TOKEN_STORAGE_KEY = "credential_access_token";
 
-export function savedEmployeeId() {
+function storageValue(storage, key) {
   try {
-    return globalThis.localStorage?.getItem(EMPLOYEE_STORAGE_KEY) || "";
+    return storage?.getItem(key) || "";
   } catch {
     return "";
   }
 }
 
-export function savedAccessToken() {
+function setStorageValue(storage, key, value) {
   try {
-    return globalThis.localStorage?.getItem(TOKEN_STORAGE_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-export function saveEmployeeId(employeeId) {
-  try {
-    globalThis.localStorage?.setItem(EMPLOYEE_STORAGE_KEY, employeeId);
+    storage?.setItem(key, value);
   } catch {
     // Ignore storage failures; API calls can still pass explicit headers.
   }
 }
 
-export function saveAccessToken(accessToken) {
+function removeStorageValue(storage, key) {
   try {
-    globalThis.localStorage?.setItem(TOKEN_STORAGE_KEY, accessToken);
-  } catch {
-    // Ignore storage failures; the current page can still use explicit responses.
-  }
-}
-
-export function clearEmployeeId() {
-  try {
-    globalThis.localStorage?.removeItem(EMPLOYEE_STORAGE_KEY);
-    globalThis.localStorage?.removeItem(TOKEN_STORAGE_KEY);
+    storage?.removeItem(key);
   } catch {
     // Ignore storage failures.
   }
+}
+
+export function savedEmployeeId() {
+  return storageValue(globalThis.sessionStorage, EMPLOYEE_STORAGE_KEY)
+    || storageValue(globalThis.localStorage, EMPLOYEE_STORAGE_KEY);
+}
+
+export function savedAccessToken() {
+  return storageValue(globalThis.sessionStorage, TOKEN_STORAGE_KEY)
+    || storageValue(globalThis.localStorage, TOKEN_STORAGE_KEY);
+}
+
+export function saveEmployeeId(employeeId) {
+  setStorageValue(globalThis.sessionStorage, EMPLOYEE_STORAGE_KEY, employeeId);
+  setStorageValue(globalThis.localStorage, EMPLOYEE_STORAGE_KEY, employeeId);
+}
+
+export function saveAccessToken(accessToken) {
+  setStorageValue(globalThis.sessionStorage, TOKEN_STORAGE_KEY, accessToken);
+  setStorageValue(globalThis.localStorage, TOKEN_STORAGE_KEY, accessToken);
+}
+
+export function clearEmployeeId() {
+  removeStorageValue(globalThis.sessionStorage, EMPLOYEE_STORAGE_KEY);
+  removeStorageValue(globalThis.sessionStorage, TOKEN_STORAGE_KEY);
+  removeStorageValue(globalThis.localStorage, EMPLOYEE_STORAGE_KEY);
+  removeStorageValue(globalThis.localStorage, TOKEN_STORAGE_KEY);
 }
 
 export async function loginWithEmployeeId(employeeId, password = "") {
@@ -54,7 +64,7 @@ export async function loginWithEmployeeId(employeeId, password = "") {
     body: JSON.stringify(body),
     headers: { "X-Employee-Id": employeeId },
   });
-  saveEmployeeId(employeeId);
+  saveEmployeeId(result.user?.employee_id || employeeId);
   saveAccessToken(result.access_token);
   return result.user;
 }

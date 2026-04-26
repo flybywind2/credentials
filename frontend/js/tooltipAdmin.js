@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js";
+import { fetchJson } from "./api.js?v=20260426-mock-session";
 
 function escapeHtml(value) {
   return String(value ?? "")

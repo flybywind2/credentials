@@ -3,13 +3,18 @@ import assert from "node:assert/strict";
 
 import { fetchJson } from "../js/api.js";
 
-function stubStorage(values) {
-  const previousStorage = globalThis.localStorage;
+function stubStorage(localValues, sessionValues = {}) {
+  const previousLocalStorage = globalThis.localStorage;
+  const previousSessionStorage = globalThis.sessionStorage;
   globalThis.localStorage = {
-    getItem: (key) => values[key] || "",
+    getItem: (key) => localValues[key] || "",
+  };
+  globalThis.sessionStorage = {
+    getItem: (key) => sessionValues[key] || "",
   };
   return () => {
-    globalThis.localStorage = previousStorage;
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.sessionStorage = previousSessionStorage;
   };
 }
 
@@ -64,6 +69,39 @@ test("fetchJson sends saved bearer token on API requests", async () => {
 
   assert.equal(capturedOptions.headers.Authorization, "Bearer signed-token");
   assert.equal(capturedOptions.headers["X-Employee-Id"], "part001");
+});
+
+test("fetchJson prefers the current window mock user over shared local storage", async () => {
+  const restoreStorage = stubStorage(
+    {
+      credential_access_token: "admin-token",
+      credential_employee_id: "admin001",
+    },
+    {
+      credential_access_token: "group-token",
+      credential_employee_id: "group001",
+    },
+  );
+  const previousFetch = globalThis.fetch;
+  let capturedOptions = null;
+  globalThis.fetch = async (_path, options) => {
+    capturedOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    };
+  };
+
+  try {
+    await fetchJson("/api/approvals/subordinate-status");
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreStorage();
+  }
+
+  assert.equal(capturedOptions.headers.Authorization, "Bearer group-token");
+  assert.equal(capturedOptions.headers["X-Employee-Id"], "group001");
 });
 
 test("fetchJson explains network failures with single-port guidance", async () => {

@@ -1,4 +1,4 @@
-import { currentEmployeeId, fetchJson } from "./api.js";
+import { currentEmployeeId, fetchJson } from "./api.js?v=20260426-mock-session";
 import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";

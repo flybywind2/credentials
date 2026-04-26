@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js";
+import { fetchJson } from "./api.js?v=20260426-mock-session";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 
 function escapeHtml(value) {

@@ -71,6 +71,8 @@ data:
 data:
   APP_BASE_URL: "https://credential.example.internal"
   SSO_MODE: "broker"
+  BROKER_URL: "https://sso.example.com/svc0"
+  SERVICE_URL: "https://example1.com"
   SSO_BROKER_EMPLOYEE_HEADER: "X-Broker-Employee-Id"
   SSO_BROKER_NAME_HEADER: "X-Broker-Display-Name"
   SSO_BROKER_EMAIL_HEADER: "X-Broker-Email"
@@ -79,9 +81,9 @@ data:
   MAIL_API_BASE_URL: "mail.net"
 ```
 
-Broker/ingress 계층은 외부 요청의 `X-Broker-*` 헤더를 삭제한 뒤 인증된 요청에만 내부 헤더를 재주입해야 한다.
+Broker는 인증 후 `SERVICE_URL/?loginid=...&deptname=...&username=...` 형태로 앱에 redirect해야 한다.
 
-`SSO_MODE=broker`이면 `SSO_BROKER_EMPLOYEE_HEADER` 값이 필요하다. `MAIL_MODE=mail_api`이면 `MAIL_API_BASE_URL` 값이 필요하고, `MAIL_API_SYSTEM_ID`는 필요한 경우 header `System-ID`로 전달한다.
+`SSO_MODE=broker`이면 `BROKER_URL`에서 인증을 시작하고 `SERVICE_URL/?loginid=...&deptname=...&username=...` callback으로 돌아와야 한다. `MAIL_MODE=mail_api`이면 `MAIL_API_BASE_URL` 값이 필요하고, `MAIL_API_SYSTEM_ID`는 필요한 경우 header `System-ID`로 전달한다.
 
 ## Deploy
 
@@ -147,8 +149,8 @@ kubectl -n credential delete secret credential-secrets
 
 ## Operational Notes
 
-- Broker 인증 코드는 구현되어 있다. 운영 전 사내 broker header 주입, header 제거 정책, 방화벽/DNS를 실제 클러스터에서 검증한다.
+- Broker 인증 코드는 구현되어 있다. 운영 전 `BROKER_URL`, `SERVICE_URL` callback, 방화벽/DNS를 실제 클러스터에서 검증한다.
 - 운영에서는 외부 MySQL을 사용하고 `DATABASE_URL`을 secret으로 주입한다.
-- 운영에서 mock 모드와 외부에서 주입 가능한 `X-Employee-Id` header fallback을 사용하지 않는다. Broker 모드는 ingress에서 외부 `X-Broker-*` 헤더를 제거해야 한다.
+- 운영에서 mock 모드와 외부에서 주입 가능한 `X-Employee-Id` header fallback을 사용하지 않는다.
 - Docker image는 immutable tag를 사용하고, `latest`는 개발/검증 용도로만 사용한다.
 - `secret.example.yaml`의 값은 예시이므로 실제 비밀번호나 secret 값으로 교체한 파일을 커밋하지 않는다.

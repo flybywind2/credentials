@@ -5,6 +5,8 @@ import {
   EMPLOYEE_STORAGE_KEY,
   TOKEN_STORAGE_KEY,
   clearEmployeeId,
+  brokerCallbackParams,
+  exchangeBrokerCallback,
   loginWithEmployeeId,
   logoutCurrentUser,
 } from "../js/auth.js";
@@ -116,5 +118,49 @@ test("logoutCurrentUser clears storage and server mock cookie", async () => {
     globalThis.fetch = previousFetch;
     globalThis.localStorage = previousLocalStorage;
     globalThis.sessionStorage = previousSessionStorage;
+  }
+});
+
+test("brokerCallbackParams reads broker redirect query values", () => {
+  const params = brokerCallbackParams("?loginid=group001&deptname=AI%2FIT%EC%A0%84%EB%9E%B5%EA%B7%B8%EB%A3%B9&username=%EB%B0%95%EB%AF%BC%EC%9E%AC");
+
+  assert.deepEqual(params, {
+    loginid: "group001",
+    deptname: "AI/IT전략그룹",
+    username: "박민재",
+  });
+});
+
+test("exchangeBrokerCallback posts broker query values to the session endpoint", async () => {
+  const previousFetch = globalThis.fetch;
+  let capturedPath = "";
+  let capturedOptions = null;
+  globalThis.fetch = async (path, options) => {
+    capturedPath = path;
+    capturedOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ user: { employee_id: "group001", role: "APPROVER" } }),
+    };
+  };
+
+  try {
+    const user = await exchangeBrokerCallback({
+      loginid: "group001",
+      deptname: "AI/IT전략그룹",
+      username: "박민재",
+    });
+
+    assert.equal(capturedPath, "/api/auth/broker/session");
+    assert.equal(capturedOptions.method, "POST");
+    assert.deepEqual(JSON.parse(capturedOptions.body), {
+      loginid: "group001",
+      deptname: "AI/IT전략그룹",
+      username: "박민재",
+    });
+    assert.equal(user.employee_id, "group001");
+  } finally {
+    globalThis.fetch = previousFetch;
   }
 });

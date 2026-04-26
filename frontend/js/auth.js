@@ -54,6 +54,41 @@ export function clearEmployeeId() {
   removeStorageValue(globalThis.localStorage, TOKEN_STORAGE_KEY);
 }
 
+export function brokerCallbackParams(search = globalThis.location?.search || "") {
+  const params = new URLSearchParams(search);
+  const loginid = (params.get("loginid") || "").trim();
+  if (!loginid) {
+    return null;
+  }
+  return {
+    loginid,
+    deptname: params.get("deptname") || "",
+    username: params.get("username") || "",
+  };
+}
+
+export function clearBrokerCallbackFromUrl() {
+  if (typeof window === "undefined" || !window.location || !window.history) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  ["loginid", "deptname", "username"].forEach((key) => url.searchParams.delete(key));
+  const nextPath = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", nextPath);
+}
+
+export async function exchangeBrokerCallback(params) {
+  const result = await fetchJson("/api/auth/broker/session", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return result.user;
+}
+
+export async function loadSsoConfig() {
+  return fetchJson("/api/auth/sso-config");
+}
+
 export async function logoutCurrentUser() {
   try {
     await fetchJson("/api/auth/logout", { method: "POST" });

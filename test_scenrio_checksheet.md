@@ -34,6 +34,8 @@
 | [ ] | `DATABASE_URL` | 예: `mysql+pymysql://...` 또는 `sqlite:///./dev.db` |  |
 | [ ] | `APP_BASE_URL` | 승인 메일의 바로가기 링크 기준 URL |  |
 | [ ] | `SSO_MODE` | 운영은 `broker`, 로컬 직접 테스트는 `mock` |  |
+| [ ] | `BROKER_URL` | 예: `https://sso.example.com/svc0` |  |
+| [ ] | `SERVICE_URL` | 예: `https://example1.com` |  |
 | [ ] | `SSO_TOKEN_SECRET` | mock token 서명용 secret. 운영에서도 임의 긴 값 사용 권장 |  |
 | [ ] | `SSO_ADMIN_EMPLOYEE_IDS` | 쉼표 구분 관리자 사번 |  |
 | [ ] | `MAIL_MODE` | `disabled` 또는 `mail_api` |  |
@@ -42,12 +44,9 @@
 
 | 체크 | 변수 | 확인 내용 | 결과/메모 |
 | --- | --- | --- | --- |
-| [ ] | `SSO_MODE=broker` | 앱 앞단의 SSO proxy/broker가 인증 후 헤더를 주입 |  |
-| [ ] | `SSO_BROKER_EMPLOYEE_HEADER` | 기본값 `X-Broker-Employee-Id` 또는 회사 표준 헤더 |  |
-| [ ] | `SSO_BROKER_NAME_HEADER` | 선택, 표시명 헤더가 있으면 설정 |  |
-| [ ] | `SSO_BROKER_EMAIL_HEADER` | 선택, 메일 헤더가 있으면 설정 |  |
+| [ ] | `SSO_MODE=broker` | 앱이 `BROKER_URL`로 이동해 SSO 인증 시작 |  |
+| [ ] | callback URL | 인증 후 `SERVICE_URL/?loginid=...&deptname=...&username=...`으로 돌아옴 |  |
 | [ ] | `SSO_BROKER_DEPT_HEADER` | 기본값 `deptname`, 실/팀/그룹 소속명 매핑에 사용 |  |
-| [ ] | Proxy 보안 | 외부 요청의 동일 헤더를 제거하고 인증 후 재주입 |  |
 
 ### Mail API
 
@@ -73,7 +72,7 @@ node --test frontend\tests\*.test.mjs
 | --- | --- | --- | --- |
 | [ ] | SSO adapter 단위 테스트 | mock/broker adapter 선택 및 제거된 SSO mode 차단 로직 통과 |  |
 | [ ] | 로그인 API 테스트 | mock `/api/auth/login`, token 발급, `/api/auth/me` 통과 |  |
-| [ ] | Broker 인증 테스트 | broker header 기반 `/api/auth/me` 통과, 외부 fallback 무시 |  |
+| [ ] | Broker 인증 테스트 | callback query 기반 session 생성 후 `/api/auth/me` 통과, 외부 fallback 무시 |  |
 | [ ] | 담당조직 변경 테스트 | 관리자 사용자 권한관리에서 담당조직 변경 후 `auth/me`, 조직 목록, 업무 조회 범위가 변경됨 |  |
 | [ ] | 기존 세션 갱신 테스트 | 담당조직 변경 전 로그인 브라우저도 새로고침 후 DB의 최신 담당조직이 반영됨 |  |
 | [ ] | 조직장 자동계정 override 테스트 | 조직장 자동계정을 관리 사용자로 등록하면 기존 자동 조직장 범위가 섞이지 않음 |  |
@@ -109,12 +108,13 @@ uvicorn backend.main:app --reload --port 8000
 | 체크 | 시나리오 | 방법 | 기대 결과 | 결과/메모 |
 | --- | --- | --- | --- | --- |
 | [ ] | 인증 헤더 정상 매핑 | SSO broker를 거쳐 앱 접속 | 사용자명/역할이 실제 사번 기준으로 표시 |  |
+| [ ] | callback query 확인 | 인증 후 주소가 `SERVICE_URL/?loginid=...&deptname=...&username=...` 형태인지 확인 | 실제 값이 들어오고 앱 접속 후 주소창에서 query 제거 |  |
+| [ ] | broker session 생성 | callback 후 Network에서 `/api/auth/broker/session` 확인 | 200 응답, 현재 사용자 세션 생성 |  |
 | [ ] | `/api/auth/me` 확인 | broker 경유 상태에서 `/api/auth/me` 호출 | 현재 사용자 JSON이 실제 사번과 일치 |  |
 | [ ] | `deptname` 단일 파트 매핑 | `deptname`이 CSV의 실/팀/그룹/파트 중 하나와 매칭되고 후보 파트가 1개 | 해당 파트 소속 입력자로 접속 |  |
 | [ ] | `deptname` 미등록 | `deptname`이 CSV 조직 정보에 없음 | `소속 정보 등록 필요` 모달 표시 |  |
 | [ ] | `deptname` 다중 후보 | 같은 실/팀/그룹 아래 여러 파트가 있어 1개로 확정 불가 | 담당자에게 CSV 파트 정보 등록/보완 요청 모달 표시 |  |
-| [ ] | 외부 헤더 spoof 차단 | broker 밖에서 임의 `X-Broker-Employee-Id` 주입 시도 | proxy가 헤더 제거 또는 접근 차단 |  |
-| [ ] | 개발용 fallback 차단 | `SSO_MODE=broker`에서 `X-Employee-Id`만 넣고 API 호출 | 인증되지 않거나 broker header 요구 |  |
+| [ ] | 임의 사번 fallback 차단 | `SSO_MODE=broker`에서 `X-Employee-Id`만 넣고 API 호출 | 인증되지 않거나 broker session 요구 |  |
 | [ ] | 관리자 권한 매핑 | 관리자 사번으로 접속 | 시스템 관리 메뉴 접근 가능 |  |
 | [ ] | 일반 사용자 권한 매핑 | 파트장/일반 사용자 사번으로 접속 | 허용된 메뉴만 표시 |  |
 
@@ -196,21 +196,17 @@ Invoke-RestMethod `
   -Headers @{ "X-Employee-Id" = "part001" }
 ```
 
-Broker SSO는 보통 직접 form login을 쓰지 않는다. proxy를 거치지 않고 header만 넣는 방식은 보안 검증용으로만 사용한다.
+Broker SSO는 직접 form login을 쓰지 않는다. 아래 명령은 broker callback query를 서버 세션으로 교환하는 API만 단독 검증한다.
 
 ```powershell
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/api/auth/me" `
-  -Headers @{ "X-Broker-Employee-Id" = "TEST_EMPLOYEE_ID"; "deptname" = "TEST_DEPTNAME" }
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/auth/broker/session" `
+  -ContentType "application/json" `
+  -Body '{"loginid":"TEST_EMPLOYEE_ID","deptname":"TEST_DEPTNAME","username":"TEST_USER_NAME"}'
 ```
 
-승인 대기 목록 확인:
-
-```powershell
-Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/api/approvals/pending" `
-  -Headers @{ "X-Broker-Employee-Id" = "TEST_EMPLOYEE_ID"; "deptname" = "TEST_DEPTNAME" }
-```
+승인 대기 목록은 같은 브라우저 세션에서 `/approver`에 접속하거나, callback 세션 cookie가 유지된 상태에서 `/api/approvals/pending`을 호출해 확인한다.
 
 ## 12. 최종 승인 기준
 

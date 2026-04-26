@@ -45,6 +45,20 @@ def _broker_attributes(request: Request) -> dict[str, str]:
     return attributes
 
 
+def _broker_token_attributes(token_claims: dict) -> dict[str, str]:
+    attributes = {}
+    deptname = str(token_claims.get("broker_deptname") or "").strip()
+    username = str(token_claims.get("broker_username") or "").strip()
+    email = str(token_claims.get("email") or "").strip()
+    if deptname:
+        attributes["deptname"] = deptname
+    if username:
+        attributes["displayName"] = username
+    if email:
+        attributes["email"] = email
+    return attributes
+
+
 def resolve_current_user_from_request(
     *,
     db: Session,
@@ -66,14 +80,24 @@ def resolve_current_user_from_request(
 
     if mode == "broker":
         employee_id = _configured_header(request, settings.sso_broker_employee_header)
-        if not employee_id:
-            raise HTTPException(status_code=401, detail="Broker employee header is required")
-        return resolve_app_user(
-            employee_id,
-            db=db,
-            attributes=_broker_attributes(request),
-            provider="broker",
-        )
+        if employee_id:
+            return resolve_app_user(
+                employee_id,
+                db=db,
+                attributes=_broker_attributes(request),
+                provider="broker",
+            )
+        token = cookie_token or bearer_token
+        if token:
+            token_claims = _strip_token_claims(verify_access_token(token))
+            if token_claims.get("sso_provider") == "broker":
+                return resolve_app_user(
+                    str(token_claims["employee_id"]),
+                    db=db,
+                    attributes=_broker_token_attributes(token_claims),
+                    provider="broker",
+                )
+        raise HTTPException(status_code=401, detail="Broker employee header is required")
 
     token = bearer_token or cookie_token
     if token:

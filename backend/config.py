@@ -34,6 +34,8 @@ class Settings:
     sso_broker_name_header: str = os.getenv("SSO_BROKER_NAME_HEADER", "")
     sso_broker_email_header: str = os.getenv("SSO_BROKER_EMAIL_HEADER", "")
     sso_broker_dept_header: str = os.getenv("SSO_BROKER_DEPT_HEADER", "deptname")
+    broker_url: str = os.getenv("BROKER_URL", "")
+    service_url: str = os.getenv("SERVICE_URL", "")
     mail_mode: str = os.getenv("MAIL_MODE", "disabled")
     mail_api_base_url: str = os.getenv("MAIL_API_BASE_URL", "mail.net")
     mail_api_system_id: str = os.getenv("MAIL_API_SYSTEM_ID", "")

@@ -284,7 +284,7 @@ project-root/
 
 ### 4.1 SSO 연동 【변경】
 
-운영 환경에서는 사내 SSO broker/reverse proxy가 인증된 사용자 header를 주입하고, 앱은 사번ID를 기준으로 사용자를 식별한다. 개발 환경에서는 mock 로그인을 사용한다. organizations 테이블의 사번ID 매칭을 통해 역할과 소속 조직을 자동 매핑한다. 이메일은 `{사번ID}@samsung.com`으로 자동 구성한다.
+운영 환경에서는 사용자가 `BROKER_URL`에서 인증한 뒤 broker가 `SERVICE_URL/?loginid=...&deptname=...&username=...`으로 redirect한다. 앱은 callback query를 세션으로 교환하고, `loginid`를 사번ID로 사용해 사용자를 식별한다. 개발 환경에서는 mock 로그인을 사용한다. organizations 테이블의 사번ID 매칭을 통해 역할과 소속 조직을 자동 매핑한다. 이메일은 `{사번ID}@samsung.com`으로 자동 구성한다.
 
 ### 4.2 권한 제어
 

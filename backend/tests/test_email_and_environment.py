@@ -149,7 +149,19 @@ def test_environment_validation_requires_mail_api_settings_when_enabled():
 
 
 def test_environment_validation_requires_broker_employee_header_when_broker_enabled():
-    settings = Settings(sso_mode="broker", sso_broker_employee_header="")
+    settings = Settings(
+        sso_mode="broker",
+        broker_url="https://sso.example.com/svc0",
+        service_url="https://example1.com",
+        sso_broker_employee_header="",
+    )
 
     with pytest.raises(ValueError, match="SSO_BROKER_EMPLOYEE_HEADER"):
+        validate_runtime_settings(settings)
+
+
+def test_environment_validation_requires_broker_urls_when_broker_enabled():
+    settings = Settings(sso_mode="broker")
+
+    with pytest.raises(ValueError, match="BROKER_URL"):
         validate_runtime_settings(settings)

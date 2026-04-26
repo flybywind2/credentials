@@ -1,4 +1,13 @@
-import { loginWithEmployeeId, loadCurrentUser, logoutCurrentUser, savedEmployeeId } from "./auth.js?v=20260426-mock-cookie";
+import {
+  brokerCallbackParams,
+  clearBrokerCallbackFromUrl,
+  exchangeBrokerCallback,
+  loginWithEmployeeId,
+  loadCurrentUser,
+  loadSsoConfig,
+  logoutCurrentUser,
+  savedEmployeeId,
+} from "./auth.js?v=20260426-broker-url";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { renderApproval } from "./approval.js?v=20260426-approval-status";
 import { renderDashboard } from "./dashboard.js?v=20260425-admin-scroll";
@@ -122,15 +131,30 @@ async function init() {
   const userSummary = document.querySelector("#user-summary");
   const view = document.querySelector("#view");
   let user = null;
-  try {
-    user = await loadCurrentUser();
-  } catch (error) {
-    if (isOrgMappingRequired(error)) {
-      renderLogin(view, userSummary);
-      showOrgMappingRequiredModal(error);
-      return;
+  const brokerParams = brokerCallbackParams();
+  if (brokerParams) {
+    try {
+      user = await exchangeBrokerCallback(brokerParams);
+      clearBrokerCallbackFromUrl();
+    } catch (error) {
+      if (isOrgMappingRequired(error)) {
+        renderLogin(view, userSummary);
+        showOrgMappingRequiredModal(error);
+        return;
+      }
+      throw error;
     }
-    throw error;
+  } else {
+    try {
+      user = await loadCurrentUser();
+    } catch (error) {
+      if (isOrgMappingRequired(error)) {
+        renderLogin(view, userSummary);
+        showOrgMappingRequiredModal(error);
+        return;
+      }
+      throw error;
+    }
   }
   if (!user) {
     renderLogin(view, userSummary);
@@ -214,6 +238,7 @@ function renderLogin(view, userSummary) {
       </form>
     </section>
   `;
+  renderBrokerLoginIfConfigured(view);
   view.querySelector("[data-login-form]").addEventListener("submit", async (event) => {
     event.preventDefault();
     const employeeId = event.currentTarget.elements.employee_id.value.trim();
@@ -241,6 +266,27 @@ function renderLogin(view, userSummary) {
       view.innerHTML = `<p class="error">${escapeHtml(routeError.message)}</p>`;
     }
   });
+}
+
+async function renderBrokerLoginIfConfigured(view) {
+  let config = null;
+  try {
+    config = await loadSsoConfig();
+  } catch {
+    return;
+  }
+  if (config?.sso_mode !== "broker" || !config?.broker_url) {
+    return;
+  }
+  view.innerHTML = `
+    <section class="login-screen">
+      <div class="login-form">
+        <h2>로그인</h2>
+        <p>회사 SSO 인증 후 기밀분류시스템으로 돌아옵니다.</p>
+        <a class="primary-button" href="${escapeHtml(config.broker_url)}">SSO 인증</a>
+      </div>
+    </section>
+  `;
 }
 
 if (typeof document !== "undefined") {

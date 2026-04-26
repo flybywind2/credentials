@@ -13,6 +13,8 @@ data:
   SSO_BROKER_NAME_HEADER: ""
   SSO_BROKER_EMAIL_HEADER: ""
   SSO_BROKER_DEPT_HEADER: "deptname"
+  BROKER_URL: "https://sso.example.com/svc0"
+  SERVICE_URL: "https://example1.com"
   MAIL_MODE: "disabled"
   MAIL_API_BASE_URL: "mail.net"
   MAIL_API_TIMEOUT_SECONDS: "10"

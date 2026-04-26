@@ -6,6 +6,7 @@ from backend.config import Settings
 from backend.main import app
 from backend.services import current_user as current_user_module
 from backend.services.auth_tokens import verify_access_token
+from backend.routers import auth as auth_router
 
 
 def test_login_maps_part_head_to_inputter_role_and_org():
@@ -208,6 +209,72 @@ def test_broker_me_requires_configured_employee_header(monkeypatch):
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Broker employee header is required"
+
+
+def test_sso_config_returns_broker_url_for_redirect(monkeypatch):
+    monkeypatch.setattr(
+        auth_router,
+        "settings",
+        Settings(
+            sso_mode="broker",
+            broker_url="https://sso.example.com/svc0",
+            service_url="https://example1.com",
+        ),
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/auth/sso-config")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["sso_mode"] == "broker"
+        assert body["broker_url"] == "https://sso.example.com/svc0"
+        assert body["service_url"] == "https://example1.com"
+    finally:
+        monkeypatch.setattr(auth_router, "settings", Settings())
+
+
+def test_broker_callback_query_creates_session_cookie(monkeypatch):
+    broker_settings = Settings(
+        sso_mode="broker",
+        broker_url="https://sso.example.com/svc0",
+        service_url="https://example1.com",
+        sso_broker_employee_header="X-Broker-Employee-Id",
+    )
+    monkeypatch.setattr(
+        auth_router,
+        "settings",
+        broker_settings,
+    )
+    monkeypatch.setattr(
+        current_user_module,
+        "settings",
+        broker_settings,
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/auth/broker/session",
+            json={
+                "loginid": "group001",
+                "deptname": "AI/IT전략그룹",
+                "username": "박민재",
+            },
+        )
+        me_response = client.get("/api/auth/me")
+
+        assert response.status_code == 200
+        assert "credential_access_token=" in response.headers["set-cookie"]
+        assert response.json()["user"]["employee_id"] == "group001"
+        assert response.json()["user"]["sso_provider"] == "broker"
+        assert me_response.status_code == 200
+        assert me_response.json()["employee_id"] == "group001"
+        assert me_response.json()["sso_provider"] == "broker"
+    finally:
+        monkeypatch.setattr(auth_router, "settings", Settings())
+        monkeypatch.setattr(current_user_module, "settings", Settings())
 
 
 def test_broker_me_maps_unique_deptname_to_imported_part(monkeypatch):

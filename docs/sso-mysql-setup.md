@@ -9,7 +9,7 @@
 - DB 연결은 `DATABASE_URL`로 전환 가능하며, 기본값은 `sqlite:///./dev.db`이다.
 - MySQL 드라이버는 `PyMySQL`을 사용한다.
 - SSO 설정 모드는 `mock`, `broker`만 지원한다.
-- Broker 모드는 사내 SSO broker/reverse proxy가 주입하는 내부 사용자 헤더를 신뢰한다.
+- Broker 모드는 `BROKER_URL`로 인증을 시작하고, broker가 `SERVICE_URL/?loginid=...&deptname=...&username=...`으로 돌려준 callback query를 앱 세션으로 교환한다. 내부 사용자 헤더 주입 방식도 보조로 지원한다.
 - `X-Employee-Id` 헤더 fallback은 `SSO_MODE=mock` 개발 모드에서만 동작한다.
 - 메일은 `MAIL_MODE=disabled` 또는 `MAIL_MODE=mail_api`만 지원한다.
 
@@ -27,6 +27,8 @@ Copy-Item .env.example .env.private-cloud
 DATABASE_URL=mysql+pymysql://credential_user:change-me@mysql.internal:3306/credential?charset=utf8mb4
 SSO_MODE=broker
 SSO_TOKEN_SECRET=change-me-to-random-32-byte-secret
+BROKER_URL=https://sso.example.com/svc0
+SERVICE_URL=https://example1.com
 SSO_BROKER_EMPLOYEE_HEADER=X-Broker-Employee-Id
 SSO_BROKER_NAME_HEADER=X-Broker-Display-Name
 SSO_BROKER_EMAIL_HEADER=X-Broker-Email
@@ -47,7 +49,7 @@ MAIL_MODE=disabled
 APP_BASE_URL=http://127.0.0.1:8000
 ```
 
-Broker/proxy는 외부 클라이언트가 보낸 `X-Broker-*` 헤더를 제거한 뒤, 인증된 사용자에 대해서만 내부 헤더를 다시 주입해야 한다.
+Broker는 인증 후 `SERVICE_URL/?loginid=사번&deptname=소속명&username=이름` 형태로 redirect해야 한다. 내부 header 방식을 같이 쓰는 경우 proxy는 외부 클라이언트가 보낸 `X-Broker-*` 헤더를 제거한 뒤 인증된 사용자에 대해서만 내부 헤더를 다시 주입해야 한다.
 
 ## MySQL 준비
 
@@ -102,6 +104,8 @@ docker compose -f docker/docker-compose.private-cloud.yml up --build -d
 ```powershell
 $env:DATABASE_URL="mysql+pymysql://credential_user:change-me@mysql.internal:3306/credential?charset=utf8mb4"
 $env:SSO_MODE="broker"
+$env:BROKER_URL="https://sso.example.com/svc0"
+$env:SERVICE_URL="https://example1.com"
 $env:SSO_BROKER_EMPLOYEE_HEADER="X-Broker-Employee-Id"
 $env:SSO_BROKER_DEPT_HEADER="deptname"
 $env:MAIL_MODE="disabled"
@@ -112,9 +116,10 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 ## SSO 운영 연동 체크리스트
 
-- `SSO_MODE=broker`에서는 `/api/auth/me`와 업무 API가 `SSO_BROKER_EMPLOYEE_HEADER`에 지정된 내부 헤더에서 사번을 읽는다.
-- 기본 사번 헤더는 `X-Broker-Employee-Id`이며, 표시명과 메일은 선택적으로 `SSO_BROKER_NAME_HEADER`, `SSO_BROKER_EMAIL_HEADER`에서 읽는다.
-- 소속 헤더 기본값은 `deptname`이다. broker의 `deptname`이 실/팀/그룹까지만 들어오는 경우 CSV로 import한 조직 정보의 `division_name`, `team_name`, `group_name`, `part_name`과 비교해 파트 후보가 1개로 확정될 때만 접속을 허용한다.
+- `SSO_MODE=broker`에서는 프론트엔드가 `BROKER_URL`로 이동해 인증을 시작한다.
+- 인증 완료 후 broker는 `SERVICE_URL/?loginid=...&deptname=...&username=...`으로 redirect한다.
+- 앱은 callback query를 `/api/auth/broker/session`으로 교환해 HttpOnly 세션 cookie를 발급하고, 이후 `/api/auth/me`와 업무 API는 이 세션으로 현재 사용자를 해석한다.
+- 소속 파라미터 이름은 `deptname`이다. broker의 `deptname`이 실/팀/그룹까지만 들어오는 경우 CSV로 import한 조직 정보의 `division_name`, `team_name`, `group_name`, `part_name`과 비교해 파트 후보가 1개로 확정될 때만 접속을 허용한다.
 - `deptname`으로 파트를 찾을 수 없거나 여러 파트가 매칭되어 확정할 수 없으면 409 `ORG_MAPPING_REQUIRED`를 반환하고, 프론트는 담당자에게 정보 등록을 요청하는 모달을 표시한다.
 - 개발용 `X-Employee-Id` fallback과 mock cookie는 broker 모드에서 무시된다.
 - Reverse proxy나 broker 계층에서 외부 요청의 동일 헤더를 반드시 삭제하고 인증 후 재주입한다.
@@ -149,12 +154,14 @@ with engine.connect() as conn:
 '@ | python -
 ```
 
-Broker 사용자 확인:
+Broker callback 세션 확인:
 
 ```powershell
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/api/auth/me" `
-  -Headers @{ "X-Broker-Employee-Id" = "part001"; "deptname" = "AI/IT전략그룹" }
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/auth/broker/session" `
+  -ContentType "application/json" `
+  -Body '{"loginid":"part001","deptname":"AI/IT전략그룹","username":"홍길동"}'
 ```
 
 관련 자동 테스트:
@@ -166,7 +173,7 @@ python -m pytest backend/tests/test_mysql_compatibility.py backend/tests/test_ss
 ## 장애 확인 포인트
 
 - `SSO_MODE`는 `mock`, `broker`만 지원한다.
-- `SSO_MODE=broker`이면 `SSO_BROKER_EMPLOYEE_HEADER`가 필요하다.
+- `SSO_MODE=broker`이면 `BROKER_URL`, `SERVICE_URL`이 필요하다.
 - `MAIL_MODE`는 `disabled`, `mail_api`만 지원한다.
 - `MAIL_MODE=mail_api`이면 `MAIL_API_BASE_URL`이 필요하다.
 - 사내 메일 라우터는 `POST https://mail.net/send_mail` 형식으로 호출한다.

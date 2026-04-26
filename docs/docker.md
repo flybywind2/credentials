@@ -29,7 +29,7 @@ Use `.env.example` as the template for environment-specific values. Do not place
 
 ## Private Cloud Run
 
-Create `.env.private-cloud` outside source control from `.env.example`, then set production values for `DATABASE_URL`, `APP_BASE_URL`, `SSO_MODE`, broker headers, and the `MAIL_API_*` values. Use `MAIL_MODE=mail_api` for the company mail gateway. The app posts to `{MAIL_API_BASE_URL}/send_mail`; `MAIL_API_BASE_URL=mail.net` resolves to `https://mail.net/send_mail`.
+Create `.env.private-cloud` outside source control from `.env.example`, then set production values for `DATABASE_URL`, `APP_BASE_URL`, `SSO_MODE`, `BROKER_URL`, `SERVICE_URL`, and the `MAIL_API_*` values. Use `MAIL_MODE=mail_api` for the company mail gateway. The app posts to `{MAIL_API_BASE_URL}/send_mail`; `MAIL_API_BASE_URL=mail.net` resolves to `https://mail.net/send_mail`.
 
 Run the private-cloud profile from the repository root:
 
@@ -37,7 +37,7 @@ Run the private-cloud profile from the repository root:
 docker compose -f docker/docker-compose.private-cloud.yml up --build -d
 ```
 
-When `SSO_MODE=broker`, startup requires `SSO_BROKER_EMPLOYEE_HEADER`; the reverse proxy must strip external broker headers before injecting the authenticated employee id. See `docs/sso-mysql-setup.md` for the full broker SSO and MySQL setup guide.
+When `SSO_MODE=broker`, users start authentication at `BROKER_URL` and return to `SERVICE_URL/?loginid=...&deptname=...&username=...`. See `docs/sso-mysql-setup.md` for the full broker SSO and MySQL setup guide.
 
 ## Reset Local Data
 

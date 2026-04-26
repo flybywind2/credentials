@@ -51,6 +51,7 @@ class SystemSetting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     input_deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_examples_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     collection_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     collection_lock_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     collection_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

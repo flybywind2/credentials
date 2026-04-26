@@ -51,6 +51,9 @@ test("spreadsheet source includes approval confirmation and excel preview flow",
   assert.match(spreadsheetSource, /data-action="input-guide"/);
   assert.match(spreadsheetSource, /업무 입력 가이드/);
   assert.match(spreadsheetSource, /승인 요청 전 확인/);
+  assert.match(spreadsheetSource, /\/api\/input-examples/);
+  assert.match(spreadsheetSource, /data-action="toggle-example-data"/);
+  assert.match(spreadsheetSource, /EXAMPLE_DATA_STORAGE_KEY/);
   assert.match(spreadsheetSource, /data-action="\$\{approvalAction\.action\}"/);
   assert.match(spreadsheetSource, /cancel-approval/);
   assert.match(spreadsheetSource, /\/api\/approvals\/\$\{partStatus\.active_approval_id\}\/cancel/);

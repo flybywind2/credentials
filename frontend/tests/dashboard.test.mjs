@@ -37,4 +37,6 @@ test("dashboard source renders integrated ratio, donut chart, and summary contro
   assert.match(dashboardSource, /data-summary-sort/);
   assert.match(dashboardSource, /data-admin-toggle/);
   assert.match(dashboardSource, /data-department-pagination/);
+  assert.match(dashboardSource, /renderInputExampleManager/);
+  assert.match(dashboardSource, /입력 예시 데이터 관리/);
 });

@@ -266,6 +266,12 @@ body {
   border-color: var(--line);
 }
 
+.secondary-button.active-soft {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
 .primary-button:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
@@ -786,6 +792,45 @@ body {
 
 .status-metric-grid {
   border-top: 1px solid var(--line);
+}
+
+.input-example-panel {
+  background: #fff;
+  border-top: 1px solid var(--line);
+}
+
+.input-example-header,
+.input-example-admin-header {
+  padding: 14px;
+}
+
+.input-example-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.input-example-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.input-example-table,
+.input-example-admin-table {
+  min-width: 1320px;
+}
+
+.input-example-admin-section {
+  background: #fff;
+}
+
+.checkbox-cell {
+  text-align: center;
+}
+
+.checkbox-cell input {
+  width: 16px;
+  height: 16px;
 }
 
 .department-summary-section,

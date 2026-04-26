@@ -184,6 +184,8 @@ def _ensure_incremental_columns(engine) -> None:
     with engine.begin() as connection:
         if "description" not in columns:
             connection.execute(text("ALTER TABLE system_settings ADD COLUMN description TEXT"))
+        if "input_examples_json" not in columns:
+            connection.execute(text("ALTER TABLE system_settings ADD COLUMN input_examples_json TEXT"))
         if "collection_locked" not in columns:
             connection.execute(text("ALTER TABLE system_settings ADD COLUMN collection_locked BOOLEAN DEFAULT 0"))
         if "collection_lock_reason" not in columns:

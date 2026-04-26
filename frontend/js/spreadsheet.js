@@ -3,6 +3,12 @@ import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { openTaskModal } from "./form.js?v=20260425-form-comments";
+import {
+  EXAMPLE_DATA_STORAGE_KEY,
+  isExampleDataVisible,
+  renderInputExamplePanel,
+  setExampleDataVisible,
+} from "./inputExamples.js?v=20260426-input-examples";
 import { loadReadablePartMembers } from "./partMembers.js?v=20260426-mock-cookie";
 import { tooltipMap } from "./tooltipAdmin.js?v=20260421-p1b";
 
@@ -776,7 +782,7 @@ export async function renderSpreadsheet(container, options = {}) {
     options.selectedOrgId,
   );
   const orgId = Number(selectedOrganization.id || orgIdOf(currentUser));
-  const [tasks, questions, tooltipRows, deadline, rejection, partStatus, partMembers] = await Promise.all([
+  const [tasks, questions, tooltipRows, deadline, rejection, partStatus, partMembers, inputExamples] = await Promise.all([
     fetchJson(`/api/tasks?org_id=${orgId}`),
     fetchJson("/api/questions"),
     fetchJson("/api/tooltips"),
@@ -784,6 +790,7 @@ export async function renderSpreadsheet(container, options = {}) {
     fetchJson(`/api/tasks/rejection?org_id=${orgId}`),
     fetchJson(`/api/tasks/status?org_id=${orgId}`),
     loadReadablePartMembers(fetchJson, orgId),
+    fetchJson("/api/input-examples"),
   ]);
   const tooltips = tooltipMap(tooltipRows);
   const currentPartName = selectedOrganization.part_name || "";
@@ -792,6 +799,7 @@ export async function renderSpreadsheet(container, options = {}) {
   const rejectedTasks = filterRejectedTasks(tasks, rejection);
   const prioritizedTasks = prioritizeRejectedTasks(tasks, rejection);
   const approvalAction = approvalActionForStatus(partStatus);
+  const showExampleData = isExampleDataVisible();
 
   function visibleTasks() {
     return showRejectedOnly ? rejectedTasks : prioritizedTasks;
@@ -807,6 +815,13 @@ export async function renderSpreadsheet(container, options = {}) {
         <div class="toolbar">
           ${renderOrganizationSelector(editableOrganizations, selectedOrganization)}
           <button type="button" class="secondary-button" data-action="input-guide">입력 가이드</button>
+          <button
+            type="button"
+            class="secondary-button ${showExampleData ? "active-soft" : ""}"
+            data-action="toggle-example-data"
+            data-example-storage-key="${EXAMPLE_DATA_STORAGE_KEY}"
+            aria-pressed="${showExampleData}"
+          >${showExampleData ? "예시 데이터 끄기" : "예시 데이터 보기"}</button>
           <button type="button" class="secondary-button" data-action="add-row">행 추가</button>
           <button type="button" class="secondary-button" data-action="save-all">전체 저장</button>
           <button type="button" class="secondary-button" data-action="download-template">양식</button>
@@ -839,6 +854,7 @@ export async function renderSpreadsheet(container, options = {}) {
       </div>
       <div class="filter-summary" data-filter-summary></div>
       <div data-validation-panel></div>
+      ${showExampleData ? renderInputExamplePanel(inputExamples) : ""}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -928,6 +944,11 @@ export async function renderSpreadsheet(container, options = {}) {
 
   container.querySelector("[data-action='input-guide']").addEventListener("click", () => {
     openInputGuideModal();
+  });
+
+  container.querySelector("[data-action='toggle-example-data']").addEventListener("click", async () => {
+    setExampleDataVisible(!showExampleData);
+    await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
   });
 
   container.querySelector("[data-action='save-all']").addEventListener("click", async () => {

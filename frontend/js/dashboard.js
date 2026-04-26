@@ -2,6 +2,7 @@ import { fetchJson } from "./api.js?v=20260426-mock-cookie";
 import { renderAdminTaskQuery } from "./adminTaskQuery.js?v=20260421-review2";
 import { renderCollectionOpsManager } from "./collectionOps.js?v=20260425-one-time-ops";
 import { formatDday, renderDeadlineManager } from "./deadlineAdmin.js?v=20260421-p1b";
+import { renderInputExampleManager } from "./inputExampleAdmin.js?v=20260426-input-examples";
 import { renderOrganizationManager } from "./organizationAdmin.js?v=20260425-optional-division-head";
 import { renderPartMemberManager } from "./partMemberAdmin.js?v=20260425-part-member-admin";
 import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
@@ -234,6 +235,12 @@ export async function renderDashboard(container) {
         bodyId: "admin-task-query-root",
       })}
       ${renderAdminPanel({
+        id: "input-examples",
+        title: "입력 예시 데이터 관리",
+        description: "입력 화면의 예시 행을 관리합니다.",
+        bodyId: "input-example-manager-root",
+      })}
+      ${renderAdminPanel({
         id: "users",
         title: "사용자 권한 관리",
         description: "사용자 권한과 담당 조직을 관리합니다.",
@@ -289,6 +296,7 @@ export async function renderDashboard(container) {
   await renderDeadlineManager(container.querySelector("#deadline-manager-root"));
   await renderCollectionOpsManager(container.querySelector("#collection-ops-root"));
   await renderAdminTaskQuery(container.querySelector("#admin-task-query-root"));
+  await renderInputExampleManager(container.querySelector("#input-example-manager-root"));
   await renderUserManager(container.querySelector("#user-manager-root"));
   await renderPartMemberManager(container.querySelector("#part-member-manager-root"));
   await renderOrganizationManager(container.querySelector("#organization-manager-root"));

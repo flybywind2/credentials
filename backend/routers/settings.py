@@ -1,4 +1,5 @@
 from datetime import date
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -34,6 +35,92 @@ class TooltipUpdate(BaseModel):
 class DeadlineUpdate(BaseModel):
     input_deadline: date | None = None
     description: str | None = None
+
+
+class InputExampleRow(BaseModel):
+    sub_part: str | None = ""
+    major_task: str | None = ""
+    detail_task: str | None = ""
+    is_confidential: bool = False
+    is_national_tech: bool = False
+    is_compliance: bool = False
+    storage_location: str | None = ""
+    related_menu: str | None = ""
+    share_scope: str | None = ""
+
+
+class InputExampleUpdate(BaseModel):
+    rows: list[InputExampleRow]
+
+
+DEFAULT_INPUT_EXAMPLES = [
+    {
+        "sub_part": "전략기획파트",
+        "major_task": "전략 보고서 관리",
+        "detail_task": "사업 전략 보고서 작성 및 배포 현황 관리",
+        "is_confidential": True,
+        "is_national_tech": False,
+        "is_compliance": False,
+        "storage_location": "부서 공유 드라이브",
+        "related_menu": "전략 포털",
+        "share_scope": "DIVISION_BU",
+    },
+    {
+        "sub_part": "AI개발파트",
+        "major_task": "AI 모델 학습 데이터 관리",
+        "detail_task": "모델 학습용 데이터셋 수집, 정제, 반출 이력 관리",
+        "is_confidential": False,
+        "is_national_tech": True,
+        "is_compliance": True,
+        "storage_location": "분석 서버",
+        "related_menu": "MLOps",
+        "share_scope": "ORG_UNIT",
+    },
+    {
+        "sub_part": "운영지원파트",
+        "major_task": "회의체 운영 현황 관리",
+        "detail_task": "정기 회의 안건과 참석자 현황 정리",
+        "is_confidential": False,
+        "is_national_tech": False,
+        "is_compliance": False,
+        "storage_location": "협업 도구",
+        "related_menu": "일정 관리",
+        "share_scope": "ORG_UNIT",
+    },
+]
+
+
+def _model_to_dict(model: BaseModel) -> dict:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
+def _clean_input_example(row: dict | InputExampleRow) -> dict:
+    data = _model_to_dict(row) if isinstance(row, BaseModel) else dict(row)
+    return {
+        "sub_part": (data.get("sub_part") or "").strip(),
+        "major_task": (data.get("major_task") or "").strip(),
+        "detail_task": (data.get("detail_task") or "").strip(),
+        "is_confidential": bool(data.get("is_confidential")),
+        "is_national_tech": bool(data.get("is_national_tech")),
+        "is_compliance": bool(data.get("is_compliance")),
+        "storage_location": (data.get("storage_location") or "").strip(),
+        "related_menu": (data.get("related_menu") or "").strip(),
+        "share_scope": (data.get("share_scope") or "").strip(),
+    }
+
+
+def _input_examples_from_setting(setting: SystemSetting) -> list[dict]:
+    if setting.input_examples_json is None:
+        return [_clean_input_example(row) for row in DEFAULT_INPUT_EXAMPLES]
+    try:
+        rows = json.loads(setting.input_examples_json)
+    except json.JSONDecodeError:
+        return [_clean_input_example(row) for row in DEFAULT_INPUT_EXAMPLES]
+    if not isinstance(rows, list):
+        return [_clean_input_example(row) for row in DEFAULT_INPUT_EXAMPLES]
+    return [_clean_input_example(row) for row in rows if isinstance(row, dict)]
 
 
 def _tooltip_map(db: Session) -> dict[str, ColumnTooltip]:
@@ -125,6 +212,35 @@ def _serialize_deadline(setting: SystemSetting) -> dict:
 @router.get("/settings/deadline")
 def read_public_deadline(db: Annotated[Session, Depends(get_db)]):
     return _serialize_deadline(_setting_row(db))
+
+
+@router.get("/input-examples")
+def read_public_input_examples(db: Annotated[Session, Depends(get_db)]):
+    return _input_examples_from_setting(_setting_row(db))
+
+
+@admin_router.get("/input-examples")
+def read_admin_input_examples(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    require_admin(user)
+    return _input_examples_from_setting(_setting_row(db))
+
+
+@admin_router.put("/input-examples")
+def update_input_examples(
+    payload: InputExampleUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    require_admin(user)
+    rows = [_clean_input_example(row) for row in payload.rows]
+    setting = _setting_row(db)
+    setting.input_examples_json = json.dumps(rows, ensure_ascii=False)
+    db.commit()
+    db.refresh(setting)
+    return _input_examples_from_setting(setting)
 
 
 @admin_router.get("/settings/deadline")

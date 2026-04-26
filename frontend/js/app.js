@@ -10,7 +10,7 @@ import {
 } from "./auth.js?v=20260426-broker-url";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { renderApproval } from "./approval.js?v=20260426-approval-status";
-import { renderDashboard } from "./dashboard.js?v=20260425-admin-scroll";
+import { renderDashboard } from "./dashboard.js?v=20260426-input-examples";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260426-classification-donut";
 import { renderPartStatus } from "./partStatus.js?v=20260426-classification-donut";
 import { renderSpreadsheet } from "./spreadsheet.js?v=20260425-paste-grid";

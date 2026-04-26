@@ -573,6 +573,26 @@ def _record_task_reviews(
         )
 
 
+def _apply_rejection_task_statuses(
+    db: Session,
+    request: ApprovalRequest,
+    reviews: list[ApprovalTaskReviewInput],
+) -> None:
+    tasks = _request_tasks(db, request)
+    if not reviews:
+        for task in tasks:
+            task.status = "REJECTED"
+        return
+
+    decisions_by_task_id = {review.task_id: review.decision for review in reviews}
+    for task in tasks:
+        decision = decisions_by_task_id.get(task.id)
+        if decision == "REJECTED":
+            task.status = "REJECTED"
+        elif decision == "APPROVED":
+            task.status = "SUBMITTED"
+
+
 @router.post("/{approval_id}/approve")
 def approve_request(
     approval_id: int,
@@ -712,10 +732,7 @@ def reject_request(
     request.status = "REJECTED"
     request.reject_reason = payload.reject_reason
 
-    for task in db.scalars(
-        select(TaskEntry).where(TaskEntry.organization_id == request.organization_id)
-    ).all():
-        task.status = "REJECTED"
+    _apply_rejection_task_statuses(db, request, payload.task_reviews)
 
     log_audit(
         db,

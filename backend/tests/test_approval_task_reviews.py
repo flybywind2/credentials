@@ -139,6 +139,83 @@ def test_latest_rejection_exposes_per_task_review_comments_to_inputter():
         client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
 
 
+def test_partial_task_rejection_keeps_approved_items_submitted():
+    client = TestClient(app)
+    org = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "검토실partial",
+            "division_head_name": "검토실장",
+            "division_head_id": "div001",
+            "part_name": "검토파트partial",
+            "part_head_name": "검토파트장",
+            "part_head_id": "reviewerpartial",
+            "org_type": "DIV_DIRECT",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+    rejected_task = client.post(
+        "/api/tasks",
+        json={
+            "organization_id": org["id"],
+            "major_task": "반려 대상 대업무",
+            "detail_task": "보완 필요한 세부업무",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+    approved_task = client.post(
+        "/api/tasks",
+        json={
+            "organization_id": org["id"],
+            "major_task": "승인 유지 대업무",
+            "detail_task": "반려 없이 유지될 세부업무",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+    approval = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+
+    try:
+        reject = client.post(
+            f"/api/approvals/{approval['id']}/reject",
+            json={
+                "reject_reason": "일부 항목만 반려",
+                "task_reviews": [
+                    {
+                        "task_id": rejected_task["id"],
+                        "decision": "REJECTED",
+                        "comment": "이 항목만 보완",
+                    },
+                    {
+                        "task_id": approved_task["id"],
+                        "decision": "APPROVED",
+                        "comment": "문제 없음",
+                    },
+                ],
+            },
+            headers={"X-Employee-Id": "div001"},
+        )
+        tasks = client.get(
+            f"/api/tasks?org_id={org['id']}",
+            headers={"X-Employee-Id": "admin001"},
+        ).json()
+
+        assert reject.status_code == 200
+        statuses_by_id = {task["id"]: task["status"] for task in tasks}
+        assert statuses_by_id[rejected_task["id"]] == "REJECTED"
+        assert statuses_by_id[approved_task["id"]] == "SUBMITTED"
+    finally:
+        client.delete(f"/api/tasks/{approved_task['id']}", headers={"X-Employee-Id": "admin001"})
+        client.delete(f"/api/tasks/{rejected_task['id']}", headers={"X-Employee-Id": "admin001"})
+        client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
+
+
 def test_admin_task_query_exposes_latest_task_review():
     client = TestClient(app)
     org, task, approval = _create_div_direct_submission(client, "adminview")

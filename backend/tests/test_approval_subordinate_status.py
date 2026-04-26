@@ -128,6 +128,48 @@ def test_group_head_subordinate_status_shows_part_rows_and_approval_state(tmp_pa
         app.dependency_overrides.clear()
 
 
+def test_group_head_status_does_not_expand_when_group_name_is_missing(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        _create_org(
+            client,
+            division_name="MySQL보정실",
+            division_head_id="mysql-scope-div",
+            team_name="MySQL보정팀",
+            team_head_id="mysql-scope-team",
+            group_name=None,
+            group_head_id="mysql-scope-group",
+            part_name="MySQL공백그룹파트A",
+            part_head_id="mysql-scope-part-a",
+            org_type="NORMAL",
+        )
+        _create_org(
+            client,
+            division_name="MySQL보정실",
+            division_head_id="mysql-scope-div",
+            team_name="MySQL보정팀",
+            team_head_id="mysql-scope-team",
+            group_name=None,
+            group_head_id="mysql-scope-group",
+            part_name="MySQL공백그룹파트B",
+            part_head_id="mysql-scope-part-b",
+            org_type="NORMAL",
+        )
+
+        response = client.get(
+            "/api/approvals/subordinate-status",
+            headers={"X-Employee-Id": "mysql-scope-group"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["scope_label"] == "파트현황"
+        assert [row["display_name"] for row in body["rows"]] == ["MySQL공백그룹파트A"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_team_head_status_groups_groups_and_expands_team_direct_parts(tmp_path):
     client = _client(tmp_path)
 

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -80,14 +80,27 @@ def _serialize(org: Organization) -> dict:
     }
 
 
+def _clean_scope_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def _scope_condition(id_column, name_column, scope_id: str | None, scope_name: str | None):
-    if scope_id and scope_name:
-        return (id_column == scope_id) & (name_column == scope_name)
-    if scope_id:
-        return id_column == scope_id
-    if scope_name:
-        return name_column == scope_name
-    return None
+    scope_id = _clean_scope_text(scope_id)
+    scope_name = _clean_scope_text(scope_name)
+    if not scope_id or not scope_name:
+        return None
+    return (id_column == scope_id) & (name_column == scope_name)
+
+
+def _own_organization_condition(user: dict):
+    return Organization.id == user["organization_id"]
+
+
+def _non_blank(column):
+    return and_(column.is_not(None), func.trim(column) != "")
 
 
 def _scoped_organization_query(user: dict):
@@ -109,6 +122,7 @@ def _scoped_organization_query(user: dict):
         )
         if condition is not None:
             return query.where(condition)
+        return query.where(_own_organization_condition(user))
     if current_org.get("team_head_id") == employee_id:
         team_head_id = current_org.get("team_head_id")
         team_name = current_org.get("team_name")
@@ -120,6 +134,7 @@ def _scoped_organization_query(user: dict):
         )
         if condition is not None:
             return query.where(condition)
+        return query.where(_own_organization_condition(user))
     if current_org.get("division_head_id") == employee_id:
         division_head_id = current_org.get("division_head_id")
         division_name = current_org.get("division_name")
@@ -131,8 +146,9 @@ def _scoped_organization_query(user: dict):
         )
         if condition is not None:
             return query.where(condition)
+        return query.where(_own_organization_condition(user))
     if current_org.get("part_head_id") == employee_id:
-        return query.where(Organization.id == user["organization_id"])
+        return query.where(_own_organization_condition(user))
     if user.get("managed"):
         group_head_id = current_org.get("group_head_id")
         group_name = current_org.get("group_name")
@@ -144,12 +160,14 @@ def _scoped_organization_query(user: dict):
         )
         if condition is not None:
             return query.where(condition)
-        return query.where(Organization.id == user["organization_id"])
+        return query.where(_own_organization_condition(user))
     return query.where(
-        (Organization.group_head_id == employee_id)
-        | (Organization.team_head_id == employee_id)
-        | (Organization.division_head_id == employee_id)
-        | (Organization.part_head_id == employee_id)
+        or_(
+            and_(Organization.group_head_id == employee_id, _non_blank(Organization.group_name)),
+            and_(Organization.team_head_id == employee_id, _non_blank(Organization.team_name)),
+            and_(Organization.division_head_id == employee_id, _non_blank(Organization.division_name)),
+            Organization.part_head_id == employee_id,
+        )
     )
 
 
@@ -170,10 +188,7 @@ CSV_FIELD_MAP = {
 
 
 def _clean_text(value: str | None) -> str | None:
-    if value is None:
-        return None
-    stripped = value.strip()
-    return stripped or None
+    return _clean_scope_text(value)
 
 
 def _org_type_from_data(data: dict) -> str:

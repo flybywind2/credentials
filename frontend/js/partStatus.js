@@ -7,7 +7,7 @@ import {
   orgPathOfOrganization,
   selectedEditableOrganization,
   shouldShowOrganizationSelector,
-} from "./spreadsheet.js?v=20260426-managed-org-scope";
+} from "./spreadsheet.js?v=20260426-share-scope-label";
 
 function escapeHtml(value) {
   return String(value ?? "")

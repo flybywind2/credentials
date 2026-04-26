@@ -453,7 +453,7 @@ export function openTaskModal(
             <label for="modal-share-scope">공유 범위
               <select id="modal-share-scope" name="share_scope">
                 <option value="">선택</option>
-                <option value="DIVISION_BU" ${task.share_scope === "DIVISION_BU" ? "selected" : ""}>부문/사업부</option>
+                <option value="DIVISION_BU" ${task.share_scope === "DIVISION_BU" ? "selected" : ""}>부문</option>
                 <option value="BUSINESS_UNIT" ${task.share_scope === "BUSINESS_UNIT" ? "selected" : ""}>사업부</option>
                 <option value="ORG_UNIT" ${task.share_scope === "ORG_UNIT" ? "selected" : ""}>실·팀·그룹</option>
               </select>

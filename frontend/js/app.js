@@ -12,8 +12,8 @@ import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { renderApproval } from "./approval.js?v=20260426-approval-status";
 import { renderDashboard } from "./dashboard.js?v=20260426-input-examples";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260426-classification-donut";
-import { renderPartStatus } from "./partStatus.js?v=20260426-managed-org-scope";
-import { renderSpreadsheet } from "./spreadsheet.js?v=20260426-managed-org-scope";
+import { renderPartStatus } from "./partStatus.js?v=20260426-share-scope-label";
+import { renderSpreadsheet } from "./spreadsheet.js?v=20260426-share-scope-label";
 
 const routes = {
   inputter: renderSpreadsheet,

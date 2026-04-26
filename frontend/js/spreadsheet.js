@@ -2,7 +2,7 @@ import { currentEmployeeId, fetchJson } from "./api.js?v=20260426-validation-err
 import { parseClipboardToTasks } from "./clipboard.js?v=20260425-paste-grid";
 import { formatDday } from "./deadlineAdmin.js?v=20260421-p1b";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
-import { openTaskModal } from "./form.js?v=20260425-form-comments";
+import { openTaskModal } from "./form.js?v=20260426-share-scope-label";
 import {
   EXAMPLE_DATA_STORAGE_KEY,
   isExampleDataVisible,
@@ -306,6 +306,36 @@ function allValidPreviewRows(rows, groupedErrors) {
   return rows.filter((_, index) => validIndexes.has(index));
 }
 
+export function importedTaskPayloads(rows, organizationId) {
+  const allowedFields = [
+    "sub_part",
+    "major_task",
+    "detail_task",
+    "confidential_answers",
+    "conf_data_type",
+    "conf_owner_user",
+    "national_tech_answers",
+    "ntech_data_type",
+    "ntech_owner_user",
+    "is_compliance",
+    "comp_data_type",
+    "comp_owner_user",
+    "storage_location",
+    "related_menu",
+    "share_scope",
+    "assignee_knox_ids",
+  ];
+  return rows.map((row) => {
+    const payload = { organization_id: organizationId };
+    allowedFields.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(row, field)) {
+        payload[field] = row[field];
+      }
+    });
+    return payload;
+  });
+}
+
 function renderPreviewSummary(rows, groupedErrors, selectedIndexes) {
   const summary = previewSelectionSummary(rows, groupedErrors, selectedIndexes);
   return `
@@ -376,6 +406,33 @@ function renderPreviewRows(rows, groupedErrors, selectedIndexes = new Set()) {
   `;
 }
 
+export function renderPasteGridRows(rows) {
+  const previewRows = rows.slice(0, 20);
+  const emptyRows = Array.from({ length: Math.max(2 - previewRows.length, 0) });
+  return `
+    <div class="excel-paste-grid-header">
+      <span>소파트</span>
+      <span>대업무</span>
+      <span>세부업무</span>
+    </div>
+    ${previewRows.map((row) => `
+      <div class="excel-paste-grid-row">
+        <span>${escapeHtml(row.sub_part || "")}</span>
+        <span>${escapeHtml(row.major_task || "")}</span>
+        <span>${escapeHtml(row.detail_task || "")}</span>
+      </div>
+    `).join("")}
+    ${emptyRows.map(() => `
+      <div class="excel-paste-grid-row">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    `).join("")}
+    ${rows.length > previewRows.length ? `<p class="empty-note">외 ${rows.length - previewRows.length}행은 아래 미리보기 표에서 확인하세요.</p>` : ""}
+  `;
+}
+
 function normalizeClipboardPayload(payload = {}) {
   if (typeof payload === "string") {
     return { text: payload, html: "" };
@@ -403,21 +460,7 @@ function openPastePreviewModal(initialPayload, questions, organizationId, onSave
       </header>
       <div class="paste-preview-body">
         <div class="excel-paste-grid" data-paste-dropzone tabindex="0" role="textbox" aria-label="Excel 붙여넣기 영역">
-          <div class="excel-paste-grid-header">
-            <span>소파트</span>
-            <span>대업무</span>
-            <span>세부업무</span>
-          </div>
-          <div class="excel-paste-grid-row">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          <div class="excel-paste-grid-row">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
+          ${renderPasteGridRows([])}
         </div>
         <div class="preview-summary" data-preview-summary>
           <span>전체 0행</span>
@@ -425,6 +468,7 @@ function openPastePreviewModal(initialPayload, questions, organizationId, onSave
           <span>오류 0행</span>
           <span>선택 0행</span>
         </div>
+        <div data-preview-error></div>
         <div data-preview-result>${renderPreviewRows([], new Map())}</div>
       </div>
       <div class="modal-actions">
@@ -440,8 +484,21 @@ function openPastePreviewModal(initialPayload, questions, organizationId, onSave
   let currentGroupedErrors = new Map();
   let selectedIndexes = new Set();
 
+  function clearPreviewError() {
+    overlay.querySelector("[data-preview-error]").innerHTML = "";
+  }
+
+  function showPreviewError(title, error) {
+    overlay.querySelector("[data-preview-error]").innerHTML = renderActionError(
+      title,
+      error?.message || String(error),
+    );
+  }
+
   async function validatePreview() {
+    clearPreviewError();
     currentRows = parseClipboardToTasks(currentClipboardPayload, questions, { organizationId });
+    overlay.querySelector("[data-paste-dropzone]").innerHTML = renderPasteGridRows(currentRows);
     const result = currentRows.length
       ? await fetchJson("/api/tasks/validate", {
         method: "POST",
@@ -464,19 +521,31 @@ function openPastePreviewModal(initialPayload, questions, organizationId, onSave
       return;
     }
     if (event.target.closest("[data-action='preview-validate']")) {
-      await validatePreview();
+      try {
+        await validatePreview();
+      } catch (error) {
+        showPreviewError("미리보기 실패", error);
+      }
       return;
     }
     if (event.target.closest("[data-action='preview-save-selected']")) {
       const validRows = selectedPreviewRows(currentRows, currentGroupedErrors, selectedIndexes);
-      await onSaveRows(validRows);
-      closePastePreview();
+      try {
+        await onSaveRows(validRows);
+        closePastePreview();
+      } catch (error) {
+        showPreviewError("저장 실패", error);
+      }
       return;
     }
     if (event.target.closest("[data-action='preview-save-all']")) {
       const validRows = allValidPreviewRows(currentRows, currentGroupedErrors);
-      await onSaveRows(validRows);
-      closePastePreview();
+      try {
+        await onSaveRows(validRows);
+        closePastePreview();
+      } catch (error) {
+        showPreviewError("저장 실패", error);
+      }
     }
   });
   overlay.addEventListener("change", (event) => {
@@ -500,13 +569,19 @@ function openPastePreviewModal(initialPayload, questions, organizationId, onSave
     }
     event.preventDefault();
     currentClipboardPayload = { html, text };
-    await validatePreview();
+    try {
+      await validatePreview();
+    } catch (error) {
+      showPreviewError("미리보기 실패", error);
+    }
   });
   bindModalAccessibility(overlay, closePastePreview);
 
   document.body.append(overlay);
   if (currentClipboardPayload.html.trim() || currentClipboardPayload.text.trim()) {
-    validatePreview();
+    validatePreview().catch((error) => {
+      showPreviewError("미리보기 실패", error);
+    });
   } else {
     overlay.querySelector("[data-paste-dropzone]").focus();
   }
@@ -971,10 +1046,7 @@ export async function renderSpreadsheet(container, options = {}) {
     }
     await fetchJson("/api/tasks/bulk", {
       method: "POST",
-      body: JSON.stringify(rows.map((row) => ({
-        organization_id: orgId,
-        ...row,
-      }))),
+      body: JSON.stringify(importedTaskPayloads(rows, orgId)),
     });
   }
 

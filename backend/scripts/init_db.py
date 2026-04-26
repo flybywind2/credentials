@@ -29,6 +29,8 @@ from backend.seed import (
 
 APPROVAL_REQUEST_STATUS_CHECK = "status in ('PENDING', 'IN_PROGRESS', 'APPROVED', 'REJECTED', 'CANCELLED')"
 APPROVAL_STEP_STATUS_CHECK = "status in ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')"
+TASK_ENTRY_STATUS_VALUES = ("UPLOADED", "DRAFT", "SUBMITTED", "APPROVED", "REJECTED")
+TASK_ENTRY_STATUS_CHECK = "status in ('UPLOADED', 'DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED')"
 
 
 def _sqlite_connect_args(database_url: str) -> dict[str, bool]:
@@ -195,6 +197,19 @@ def _ensure_incremental_columns(engine) -> None:
 
 
 def _ensure_uploaded_status_constraint(engine) -> None:
+    if engine.dialect.name in {"mysql", "mariadb"}:
+        inspector = inspect(engine)
+        if "task_entries" not in inspector.get_table_names():
+            return
+        with engine.begin() as connection:
+            _ensure_mysql_check_constraint(
+                connection,
+                "task_entries",
+                "ck_task_entries_status",
+                TASK_ENTRY_STATUS_CHECK,
+                required_values=TASK_ENTRY_STATUS_VALUES,
+            )
+        return
     if engine.dialect.name != "sqlite":
         return
     inspector = inspect(engine)
@@ -305,9 +320,21 @@ def _mysql_check_clause(connection, table_name: str, constraint_name: str) -> st
     ).scalar_one_or_none()
 
 
-def _ensure_mysql_check_constraint(connection, table_name: str, constraint_name: str, expression: str) -> None:
+def _has_required_check_values(current_clause: str, required_values: tuple[str, ...]) -> bool:
+    clause = current_clause.upper()
+    return all(value.upper() in clause for value in required_values)
+
+
+def _ensure_mysql_check_constraint(
+    connection,
+    table_name: str,
+    constraint_name: str,
+    expression: str,
+    *,
+    required_values: tuple[str, ...],
+) -> None:
     current_clause = _mysql_check_clause(connection, table_name, constraint_name)
-    if current_clause and "CANCELLED" in current_clause.upper():
+    if current_clause and _has_required_check_values(current_clause, required_values):
         return
     is_mariadb = bool(getattr(connection.dialect, "is_mariadb", False))
     if current_clause is not None:
@@ -327,12 +354,14 @@ def _ensure_approval_cancelled_status_constraint(engine) -> None:
                 "approval_requests",
                 "ck_approval_requests_status",
                 APPROVAL_REQUEST_STATUS_CHECK,
+                required_values=("PENDING", "IN_PROGRESS", "APPROVED", "REJECTED", "CANCELLED"),
             )
             _ensure_mysql_check_constraint(
                 connection,
                 "approval_steps",
                 "ck_approval_steps_status",
                 APPROVAL_STEP_STATUS_CHECK,
+                required_values=("PENDING", "APPROVED", "REJECTED", "CANCELLED"),
             )
         return
     if engine.dialect.name != "sqlite":

@@ -8,8 +8,10 @@ import {
   editableOrganizationsForUser,
   firstErrorRow,
   groupValidationErrors,
+  importedTaskPayloads,
   normalizeSubmitValidationErrors,
   previewSelectionSummary,
+  renderPasteGridRows,
   renderActionError,
   selectedEditableOrganization,
   selectedPreviewRows,
@@ -393,6 +395,55 @@ test("selectedPreviewRows returns only checked valid rows", () => {
   assert.deepEqual(selectedPreviewRows(rows, groupedErrors, selectedIndexes), [
     { major_task: "저장" },
   ]);
+});
+
+test("importedTaskPayloads strips UI-only status and uses the selected organization", () => {
+  const payloads = importedTaskPayloads(
+    [
+      {
+        id: 99,
+        organization_id: 999,
+        status: "정상",
+        latest_review: { decision: "REJECTED" },
+        sub_part: "분석",
+        major_task: "대업무",
+        detail_task: "세부업무",
+        confidential_answers: [],
+        national_tech_answers: [],
+        is_compliance: false,
+      },
+    ],
+    7,
+  );
+
+  assert.deepEqual(payloads, [
+    {
+      organization_id: 7,
+      sub_part: "분석",
+      major_task: "대업무",
+      detail_task: "세부업무",
+      confidential_answers: [],
+      national_tech_answers: [],
+      is_compliance: false,
+    },
+  ]);
+});
+
+test("renderPasteGridRows shows pasted rows in the upper Excel paste area", () => {
+  const html = renderPasteGridRows([
+    { sub_part: "분석", major_task: "대업무", detail_task: "세부업무" },
+  ]);
+
+  assert.match(html, /분석/);
+  assert.match(html, /대업무/);
+  assert.match(html, /세부업무/);
+  assert.match(html, /excel-paste-grid-row/);
+});
+
+test("paste preview actions render backend failures instead of staying silent", () => {
+  assert.match(spreadsheetSource, /data-preview-error/);
+  assert.match(spreadsheetSource, /미리보기 실패/);
+  assert.match(spreadsheetSource, /저장 실패/);
 });
 
 test("deleteConfirmationMessage includes the task label when available", () => {

@@ -73,6 +73,14 @@ test("task form keeps entered metadata in the payload even when a category is no
   assert.doesNotMatch(formSource, /comp_data_type:\s*isCompliance\s*\?/);
 });
 
+test("task form labels DIVISION_BU share scope as division only", () => {
+  assert.match(
+    formSource,
+    /<option value="DIVISION_BU" \$\{task\.share_scope === "DIVISION_BU" \? "selected" : ""\}>부문<\/option>/,
+  );
+  assert.doesNotMatch(formSource, />부문\/사업부<\/option>/);
+});
+
 test("selectNoneOptionsForSection checks only none options in a classification section", () => {
   assert.equal(typeof formModule.selectNoneOptionsForSection, "function");
 

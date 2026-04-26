@@ -169,16 +169,26 @@ CSV_FIELD_MAP = {
 }
 
 
-def _org_type_from_row(row: dict[str, str]) -> str:
-    if not row.get("팀명") and not row.get("그룹명"):
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _org_type_from_data(data: dict) -> str:
+    if not data.get("team_name") and not data.get("group_name"):
         return "DIV_DIRECT"
-    if not row.get("그룹명"):
+    if not data.get("group_name"):
         return "TEAM_DIRECT"
     return "NORMAL"
 
 
 def _normalize_organization_data(data: dict, include_missing_division_heads: bool = True) -> dict:
-    normalized = dict(data)
+    normalized = {
+        key: _clean_text(value) if isinstance(value, str) or value is None else value
+        for key, value in data.items()
+    }
     for field in ("division_head_name", "division_head_id"):
         if include_missing_division_heads or field in normalized:
             normalized[field] = normalized.get(field) or ""
@@ -186,8 +196,8 @@ def _normalize_organization_data(data: dict, include_missing_division_heads: boo
 
 
 def _organization_from_csv_row(row: dict[str, str]) -> Organization:
-    data = {target: (row.get(source) or None) for source, target in CSV_FIELD_MAP.items()}
-    data["org_type"] = _org_type_from_row(row)
+    data = {target: _clean_text(row.get(source)) for source, target in CSV_FIELD_MAP.items()}
+    data["org_type"] = _org_type_from_data(data)
     data = _normalize_organization_data(data)
     return Organization(**data)
 

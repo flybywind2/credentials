@@ -44,6 +44,7 @@ def initialize_database(database_url: str = "sqlite:///./dev.db", reset: bool = 
     session = sessionmaker(bind=engine)()
     try:
         if session.query(Organization).first():
+            _normalize_existing_organizations(session)
             return
 
         organizations = []
@@ -113,6 +114,61 @@ def initialize_database(database_url: str = "sqlite:///./dev.db", reset: bool = 
         raise
     finally:
         session.close()
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _org_type_from_hierarchy(team_name: str | None, group_name: str | None) -> str:
+    if not team_name and not group_name:
+        return "DIV_DIRECT"
+    if not group_name:
+        return "TEAM_DIRECT"
+    return "NORMAL"
+
+
+def _normalize_existing_organizations(session) -> None:
+    optional_fields = (
+        "team_name",
+        "team_head_name",
+        "team_head_id",
+        "group_name",
+        "group_head_name",
+        "group_head_id",
+    )
+    required_fields = (
+        "division_name",
+        "division_head_name",
+        "division_head_id",
+        "part_name",
+        "part_head_name",
+        "part_head_id",
+    )
+    changed = False
+
+    for org in session.query(Organization).all():
+        for field in optional_fields:
+            value = getattr(org, field)
+            cleaned = _clean_optional_text(value)
+            if cleaned != value:
+                setattr(org, field, cleaned)
+                changed = True
+        for field in required_fields:
+            value = getattr(org, field)
+            if isinstance(value, str) and value.strip() != value:
+                setattr(org, field, value.strip())
+                changed = True
+        org_type = _org_type_from_hierarchy(org.team_name, org.group_name)
+        if org.org_type != org_type:
+            org.org_type = org_type
+            changed = True
+
+    if changed:
+        session.commit()
 
 
 def _ensure_incremental_columns(engine) -> None:

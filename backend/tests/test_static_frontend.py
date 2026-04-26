@@ -16,7 +16,7 @@ def test_frontend_cache_keys_include_latest_visual_modules():
     response = client.get("/")
 
     assert "/css/style.css?v=20260426-visual-refresh" in response.text
-    assert "/js/app.js?v=20260426-org-name-scope" in response.text
+    assert "/js/app.js?v=20260426-managed-org-scope" in response.text
 
 
 def test_known_spa_paths_serve_frontend_html():

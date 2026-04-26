@@ -7,7 +7,7 @@ import {
   orgPathOfOrganization,
   selectedEditableOrganization,
   shouldShowOrganizationSelector,
-} from "./spreadsheet.js?v=20260426-org-name-scope";
+} from "./spreadsheet.js?v=20260426-managed-org-scope";
 
 function escapeHtml(value) {
   return String(value ?? "")

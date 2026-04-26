@@ -90,42 +90,74 @@ function sameScopeValue(left, right, key) {
   return Boolean(leftValue && rightValue && leftValue === rightValue);
 }
 
-function sameScope(left, right, idKey, nameKey) {
-  const hasId = Boolean(left?.[idKey]);
-  const hasName = Boolean(left?.[nameKey]);
-  if (hasId && hasName) {
-    return sameScopeValue(left, right, idKey) && sameScopeValue(left, right, nameKey);
-  }
-  if (hasId) {
-    return sameScopeValue(left, right, idKey);
-  }
-  if (hasName) {
-    return sameScopeValue(left, right, nameKey);
-  }
-  return false;
-}
-
 function sameNameScope(left, right, nameKey) {
   return sameScopeValue(left, right, nameKey);
 }
 
+function sameText(left, right) {
+  const leftText = String(left ?? "").trim();
+  const rightText = String(right ?? "").trim();
+  return Boolean(leftText && rightText && leftText === rightText);
+}
+
+function mockLevelFromEmployeeId(employeeId) {
+  const value = String(employeeId || "").toLowerCase();
+  if (/^div\d+$/.test(value)) {
+    return "DIVISION";
+  }
+  if (/^team\d+$/.test(value)) {
+    return "TEAM";
+  }
+  return null;
+}
+
+function approverLevelForUser(user) {
+  const currentOrganization = user?.organization || {};
+  const employeeId = user?.employee_id;
+  if (employeeId && currentOrganization.division_head_id === employeeId) {
+    return "DIVISION";
+  }
+  if (employeeId && currentOrganization.team_head_id === employeeId) {
+    return "TEAM";
+  }
+  if (employeeId && currentOrganization.group_head_id === employeeId) {
+    return "GROUP";
+  }
+  if (employeeId && currentOrganization.part_head_id === employeeId) {
+    return "PART";
+  }
+  if (user?.managed) {
+    if (sameText(currentOrganization.division_head_name, user.name)) {
+      return "DIVISION";
+    }
+    if (sameText(currentOrganization.team_head_name, user.name)) {
+      return "TEAM";
+    }
+    if (sameText(currentOrganization.group_head_name, user.name)) {
+      return "GROUP";
+    }
+    return mockLevelFromEmployeeId(employeeId) || "GROUP";
+  }
+  return null;
+}
+
 function matchesApproverManagedScope(user, organization) {
   const currentOrganization = user?.organization;
-  const employeeId = user?.employee_id;
   if (!currentOrganization || !organization) {
     return isApproverForOrganization(user, organization);
   }
-  if (employeeId && currentOrganization.group_head_id === employeeId) {
+  const level = approverLevelForUser(user);
+  if (level === "GROUP") {
     return sameNameScope(currentOrganization, organization, "group_name");
   }
-  if (employeeId && currentOrganization.team_head_id === employeeId) {
+  if (level === "TEAM") {
     return sameNameScope(currentOrganization, organization, "team_name");
   }
-  if (employeeId && currentOrganization.division_head_id === employeeId) {
+  if (level === "DIVISION") {
     return sameNameScope(currentOrganization, organization, "division_name");
   }
-  if (user?.managed) {
-    return sameScope(currentOrganization, organization, "group_head_id", "group_name");
+  if (level === "PART") {
+    return Number(organization.id) === orgIdOf(user);
   }
   return isApproverForOrganization(user, organization);
 }

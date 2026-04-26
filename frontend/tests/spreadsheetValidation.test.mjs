@@ -169,7 +169,7 @@ test("editableOrganizationsForUser uses assigned group scope for managed approve
 
   assert.deepEqual(
     editableOrganizationsForUser(user, organizations).map((org) => org.id),
-    [10, 11],
+    [10, 11, 13],
   );
 });
 
@@ -251,6 +251,33 @@ test("editableOrganizationsForUser uses team name scope for team heads", () => {
   );
 });
 
+test("editableOrganizationsForUser uses team name scope for managed mock team heads", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "team001",
+    managed: true,
+    organization_id: 33,
+    organization: {
+      id: 33,
+      team_head_id: "csv-team-head-a",
+      team_name: "정보전략팀",
+      group_head_id: "group001",
+      group_name: "AI/IT전략그룹",
+      part_name: "전략파트",
+    },
+  };
+  const organizations = [
+    { id: 33, team_head_id: "csv-team-head-a", team_name: "정보전략팀", group_head_id: "group001", group_name: "AI/IT전략그룹", part_name: "전략파트" },
+    { id: 34, team_head_id: "csv-team-head-b", team_name: "정보전략팀", group_head_id: "group002", group_name: "생성형AI그룹", part_name: "AI파트" },
+    { id: 35, team_head_id: "team001", team_name: "다른정보전략팀", group_head_id: "group003", group_name: "타그룹", part_name: "제외파트" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [33, 34],
+  );
+});
+
 test("editableOrganizationsForUser uses division name scope for division heads", () => {
   const user = {
     role: "APPROVER",
@@ -273,6 +300,33 @@ test("editableOrganizationsForUser uses division name scope for division heads",
   assert.deepEqual(
     editableOrganizationsForUser(user, organizations).map((org) => org.id),
     [30, 31],
+  );
+});
+
+test("editableOrganizationsForUser uses division name scope for managed mock division heads", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "div001",
+    managed: true,
+    organization_id: 36,
+    organization: {
+      id: 36,
+      division_head_id: "csv-div-head-a",
+      division_name: "AI개발실",
+      team_name: "정보전략팀",
+      group_name: "AI/IT전략그룹",
+      part_name: "전략파트",
+    },
+  };
+  const organizations = [
+    { id: 36, division_head_id: "csv-div-head-a", division_name: "AI개발실", team_name: "정보전략팀", part_name: "전략파트" },
+    { id: 37, division_head_id: "csv-div-head-b", division_name: "AI개발실", team_name: "Generative AI팀", part_name: "AI파트" },
+    { id: 38, division_head_id: "div001", division_name: "다른AI개발실", team_name: "타팀", part_name: "제외파트" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [36, 37],
   );
 });
 

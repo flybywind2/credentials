@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-mock-session";
+import { fetchJson } from "./api.js?v=20260426-mock-cookie";
 
 export const EMPLOYEE_STORAGE_KEY = "credential_employee_id";
 export const TOKEN_STORAGE_KEY = "credential_access_token";
@@ -52,6 +52,15 @@ export function clearEmployeeId() {
   removeStorageValue(globalThis.sessionStorage, TOKEN_STORAGE_KEY);
   removeStorageValue(globalThis.localStorage, EMPLOYEE_STORAGE_KEY);
   removeStorageValue(globalThis.localStorage, TOKEN_STORAGE_KEY);
+}
+
+export async function logoutCurrentUser() {
+  try {
+    await fetchJson("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Local logout should still clear the browser state if the server is unreachable.
+  }
+  clearEmployeeId();
 }
 
 export async function loginWithEmployeeId(employeeId, password = "") {

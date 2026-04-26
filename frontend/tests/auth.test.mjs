@@ -6,6 +6,7 @@ import {
   TOKEN_STORAGE_KEY,
   clearEmployeeId,
   loginWithEmployeeId,
+  logoutCurrentUser,
 } from "../js/auth.js";
 
 test("loginWithEmployeeId stores access token and employee id", async () => {
@@ -54,6 +55,59 @@ test("loginWithEmployeeId stores access token and employee id", async () => {
     assert.equal(sessionValues[TOKEN_STORAGE_KEY], "signed-token");
 
     clearEmployeeId();
+    assert.equal(localValues[EMPLOYEE_STORAGE_KEY], undefined);
+    assert.equal(localValues[TOKEN_STORAGE_KEY], undefined);
+    assert.equal(sessionValues[EMPLOYEE_STORAGE_KEY], undefined);
+    assert.equal(sessionValues[TOKEN_STORAGE_KEY], undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.sessionStorage = previousSessionStorage;
+  }
+});
+
+test("logoutCurrentUser clears storage and server mock cookie", async () => {
+  const localValues = {
+    [EMPLOYEE_STORAGE_KEY]: "group001",
+    [TOKEN_STORAGE_KEY]: "signed-token",
+  };
+  const sessionValues = {
+    [EMPLOYEE_STORAGE_KEY]: "group001",
+    [TOKEN_STORAGE_KEY]: "signed-token",
+  };
+  const previousLocalStorage = globalThis.localStorage;
+  const previousSessionStorage = globalThis.sessionStorage;
+  const previousFetch = globalThis.fetch;
+  let capturedPath = "";
+  let capturedOptions = null;
+
+  globalThis.localStorage = {
+    getItem: (key) => localValues[key] || "",
+    removeItem: (key) => {
+      delete localValues[key];
+    },
+  };
+  globalThis.sessionStorage = {
+    getItem: (key) => sessionValues[key] || "",
+    removeItem: (key) => {
+      delete sessionValues[key];
+    },
+  };
+  globalThis.fetch = async (path, options) => {
+    capturedPath = path;
+    capturedOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    };
+  };
+
+  try {
+    await logoutCurrentUser();
+
+    assert.equal(capturedPath, "/api/auth/logout");
+    assert.equal(capturedOptions.method, "POST");
     assert.equal(localValues[EMPLOYEE_STORAGE_KEY], undefined);
     assert.equal(localValues[TOKEN_STORAGE_KEY], undefined);
     assert.equal(sessionValues[EMPLOYEE_STORAGE_KEY], undefined);

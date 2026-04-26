@@ -1,4 +1,4 @@
-import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260426-mock-session";
+import { loginWithEmployeeId, loadCurrentUser, logoutCurrentUser, savedEmployeeId } from "./auth.js?v=20260426-mock-cookie";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
 import { renderApproval } from "./approval.js?v=20260426-approval-status";
 import { renderDashboard } from "./dashboard.js?v=20260425-admin-scroll";
@@ -151,8 +151,8 @@ function renderAuthenticatedSummary(userSummary, user, view) {
   logoutButton.className = "secondary-button compact-filter-button";
   logoutButton.setAttribute("data-action", "logout");
   logoutButton.textContent = "로그아웃";
-  logoutButton.addEventListener("click", () => {
-    clearEmployeeId();
+  logoutButton.addEventListener("click", async () => {
+    await logoutCurrentUser();
     unbindPopstate();
     renderLogin(view, userSummary);
   });

@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-mock-session";
+import { fetchJson } from "./api.js?v=20260426-mock-cookie";
 import { renderAdminTaskQuery } from "./adminTaskQuery.js?v=20260421-review2";
 import { renderCollectionOpsManager } from "./collectionOps.js?v=20260425-one-time-ops";
 import { formatDday, renderDeadlineManager } from "./deadlineAdmin.js?v=20260421-p1b";

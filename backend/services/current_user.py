@@ -5,6 +5,8 @@ from backend.config import settings
 from backend.services.auth_tokens import verify_access_token
 from backend.services.user_mapping import resolve_app_user
 
+AUTH_COOKIE_NAME = "credential_access_token"
+
 
 def _bearer_token(authorization: str | None) -> str | None:
     if not authorization:
@@ -13,6 +15,10 @@ def _bearer_token(authorization: str | None) -> str | None:
     if scheme.lower() != "bearer" or not token:
         return None
     return token
+
+
+def _cookie_token(request: Request) -> str | None:
+    return request.cookies.get(AUTH_COOKIE_NAME) or None
 
 
 def _strip_token_claims(payload: dict) -> dict:
@@ -47,7 +53,7 @@ def resolve_current_user_from_request(
     x_employee_id: str | None,
 ) -> dict:
     mode = settings.sso_mode.lower()
-    token = _bearer_token(authorization)
+    token = _bearer_token(authorization) or _cookie_token(request)
 
     if mode == "mock":
         if x_employee_id:

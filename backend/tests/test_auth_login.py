@@ -34,6 +34,31 @@ def test_me_accepts_bearer_token():
     assert response.json()["employee_id"] == "part001"
 
 
+def test_mock_login_cookie_is_used_by_me_without_headers():
+    client = TestClient(app)
+
+    login_response = client.post("/api/auth/login", json={"employee_id": "group001"})
+    response = client.get("/api/auth/me")
+
+    assert login_response.status_code == 200
+    assert response.status_code == 200
+    body = response.json()
+    assert body["employee_id"] == "group001"
+    assert body["role"] == "APPROVER"
+
+
+def test_logout_clears_mock_login_cookie():
+    client = TestClient(app)
+    client.post("/api/auth/login", json={"employee_id": "group001"})
+
+    logout_response = client.post("/api/auth/logout")
+    response = client.get("/api/auth/me")
+
+    assert logout_response.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["employee_id"] == "admin001"
+
+
 def test_me_uses_employee_id_header_when_present():
     client = TestClient(app)
 

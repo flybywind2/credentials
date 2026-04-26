@@ -34,11 +34,7 @@ def _same_scope(user_org: dict, org: Organization, id_field: str, name_field: st
     scope_name = user_org.get(name_field)
     org_id = getattr(org, id_field)
     org_name = getattr(org, name_field)
-    if scope_id and scope_name:
-        return org_id == scope_id and org_name == scope_name
-    if scope_id:
-        return org_id == scope_id
-    return bool(scope_name and org_name == scope_name)
+    return bool(scope_id and scope_name and org_id == scope_id and org_name == scope_name)
 
 
 def _is_actual_approver_scope(user: dict, org: Organization) -> bool:

@@ -271,11 +271,7 @@ def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
 
 
 def _same_scope_values(scope_id: str | None, scope_name: str | None, org_id: str | None, org_name: str | None) -> bool:
-    if scope_id and scope_name:
-        return org_id == scope_id and org_name == scope_name
-    if scope_id:
-        return org_id == scope_id
-    return bool(scope_name and org_name == scope_name)
+    return bool(scope_id and scope_name and org_id == scope_id and org_name == scope_name)
 
 
 def _approval_role_for_user(user: dict) -> str | None:

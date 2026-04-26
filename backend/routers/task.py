@@ -150,21 +150,13 @@ def _ensure_can_read_task_org(user: dict, org_id: int | None, db: Session) -> No
 
 
 def _same_scope_values(scope_id: str | None, scope_name: str | None, org_id: str | None, org_name: str | None) -> bool:
-    if scope_id and scope_name:
-        return org_id == scope_id and org_name == scope_name
-    if scope_id:
-        return org_id == scope_id
-    return bool(scope_name and org_name == scope_name)
+    return bool(scope_id and scope_name and org_id == scope_id and org_name == scope_name)
 
 
 def _scope_condition(id_column, name_column, scope_id: str | None, scope_name: str | None):
-    if scope_id and scope_name:
-        return (id_column == scope_id) & (name_column == scope_name)
-    if scope_id:
-        return id_column == scope_id
-    if scope_name:
-        return name_column == scope_name
-    return None
+    if not scope_id or not scope_name:
+        return None
+    return (id_column == scope_id) & (name_column == scope_name)
 
 
 def _is_approver_subordinate(user: dict, org: Organization | None) -> bool:

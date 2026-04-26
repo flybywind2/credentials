@@ -272,6 +272,95 @@ def test_group_approver_task_reads_are_limited_to_current_group_name():
         client.delete(f"/api/admin/organizations/{org_id}", headers=admin_headers)
 
 
+def test_group_scope_does_not_expand_for_task_or_member_apis_when_group_name_is_missing():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    suffix = uuid4().hex[:8]
+    group_head_id = f"blank-scope-group-{suffix}"
+    first_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"공백범위실-{suffix}",
+            "division_head_name": "공백범위실장",
+            "division_head_id": f"blank-scope-div-{suffix}",
+            "team_name": f"공백범위팀-{suffix}",
+            "team_head_name": "공백범위팀장",
+            "team_head_id": f"blank-scope-team-{suffix}",
+            "group_name": None,
+            "group_head_name": "공백범위그룹장",
+            "group_head_id": group_head_id,
+            "part_name": f"공백범위파트A-{suffix}",
+            "part_head_name": "공백범위파트장A",
+            "part_head_id": f"blank-scope-part-a-{suffix}",
+            "org_type": "NORMAL",
+        },
+    )
+    assert first_org_response.status_code == 201
+    first_org_id = first_org_response.json()["id"]
+    second_org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"공백범위실-{suffix}",
+            "division_head_name": "공백범위실장",
+            "division_head_id": f"blank-scope-div-{suffix}",
+            "team_name": f"공백범위팀-{suffix}",
+            "team_head_name": "공백범위팀장",
+            "team_head_id": f"blank-scope-team-{suffix}",
+            "group_name": None,
+            "group_head_name": "공백범위그룹장",
+            "group_head_id": group_head_id,
+            "part_name": f"공백범위파트B-{suffix}",
+            "part_head_name": "공백범위파트장B",
+            "part_head_id": f"blank-scope-part-b-{suffix}",
+            "org_type": "NORMAL",
+        },
+    )
+    assert second_org_response.status_code == 201
+    second_org_id = second_org_response.json()["id"]
+    task_response = client.post(
+        "/api/tasks",
+        headers=admin_headers,
+        json={
+            "organization_id": second_org_id,
+            "major_task": "공백 범위 대업무",
+            "detail_task": "그룹명이 없으면 같은 그룹장 ID만으로 확장되면 안 된다.",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+    )
+    assert task_response.status_code == 201
+    task_id = task_response.json()["id"]
+
+    try:
+        orgs_response = client.get("/api/organizations", headers={"X-Employee-Id": group_head_id})
+        direct_tasks_response = client.get(
+            f"/api/tasks?org_id={second_org_id}",
+            headers={"X-Employee-Id": group_head_id},
+        )
+        status_response = client.get(
+            f"/api/tasks/status?org_id={second_org_id}",
+            headers={"X-Employee-Id": group_head_id},
+        )
+        group_tasks_response = client.get("/api/tasks/group", headers={"X-Employee-Id": group_head_id})
+        members_response = client.get(
+            f"/api/part-members?org_id={second_org_id}",
+            headers={"X-Employee-Id": group_head_id},
+        )
+
+        assert orgs_response.status_code == 200
+        assert [item["id"] for item in orgs_response.json()] == [first_org_id]
+        assert direct_tasks_response.status_code == 403
+        assert status_response.status_code == 403
+        assert task_id not in {item["id"] for item in group_tasks_response.json()}
+        assert members_response.status_code == 403
+    finally:
+        client.delete(f"/api/tasks/{task_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{second_org_id}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{first_org_id}", headers=admin_headers)
+
+
 def test_managed_approver_org_assignment_overrides_org_head_auto_scope():
     client = TestClient(app)
     admin_headers = {"X-Employee-Id": "admin001"}

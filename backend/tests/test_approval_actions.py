@@ -1,8 +1,11 @@
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from backend.database import SessionLocal
 from backend.main import app
+from backend.models import ApprovalRequest, ApprovalStep
 
 
 def _unique_id(prefix: str) -> str:
@@ -117,6 +120,100 @@ def test_requester_can_cancel_pending_request_and_submit_again():
     assert status_response.json()["active_approval_id"] is None
     assert resubmit_response.status_code == 201
     assert resubmit_response.json()["status"] == "PENDING"
+
+
+def test_part_status_exposes_cancel_permission_only_to_requester_or_admin():
+    client = TestClient(app)
+    data = _create_div_direct_submission(client, "취소권한표시파트")
+    viewer_id = _unique_id("viewer")
+    create_viewer_response = client.post(
+        "/api/admin/users",
+        json={
+            "employee_id": viewer_id,
+            "name": "취소권한조회자",
+            "role": "APPROVER",
+            "organization_id": data["org"]["id"],
+        },
+        headers={"X-Employee-Id": "admin001"},
+    )
+    assert create_viewer_response.status_code == 201
+
+    try:
+        admin_status = client.get(
+            f"/api/tasks/status?org_id={data['org']['id']}",
+            headers={"X-Employee-Id": "admin001"},
+        )
+        approver_status = client.get(
+            f"/api/tasks/status?org_id={data['org']['id']}",
+            headers={"X-Employee-Id": viewer_id},
+        )
+
+        assert admin_status.status_code == 200
+        assert admin_status.json()["approval_status"] == "PENDING"
+        assert admin_status.json()["can_cancel_approval"] is True
+        assert approver_status.status_code == 200
+        assert approver_status.json()["approval_status"] == "PENDING"
+        assert approver_status.json()["can_cancel_approval"] is False
+    finally:
+        client.delete(f"/api/admin/users/{viewer_id}", headers={"X-Employee-Id": "admin001"})
+
+
+def test_cancel_keeps_tasks_submitted_when_duplicate_pending_request_remains():
+    client = TestClient(app)
+    data = _create_div_direct_submission(client, "중복요청취소파트")
+    first_approval_id = data["approval"]["id"]
+
+    with SessionLocal() as db:
+        first = db.get(ApprovalRequest, first_approval_id)
+        duplicate = ApprovalRequest(
+            organization_id=first.organization_id,
+            requested_by=first.requested_by,
+            status="PENDING",
+            current_step=first.current_step,
+            total_steps=first.total_steps,
+        )
+        db.add(duplicate)
+        db.flush()
+        first_steps = db.scalars(
+            select(ApprovalStep)
+            .where(ApprovalStep.approval_request_id == first_approval_id)
+            .order_by(ApprovalStep.step_order)
+        ).all()
+        for step in first_steps:
+            db.add(
+                ApprovalStep(
+                    approval_request_id=duplicate.id,
+                    step_order=step.step_order,
+                    approver_employee_id=step.approver_employee_id,
+                    approver_name=step.approver_name,
+                    approver_role=step.approver_role,
+                    status="PENDING",
+                )
+            )
+        db.commit()
+        duplicate_approval_id = duplicate.id
+
+    first_cancel = client.post(
+        f"/api/approvals/{first_approval_id}/cancel",
+        headers={"X-Employee-Id": "admin001"},
+    )
+    tasks_after_first_cancel = client.get(
+        f"/api/tasks?org_id={data['org']['id']}",
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+    second_cancel = client.post(
+        f"/api/approvals/{duplicate_approval_id}/cancel",
+        headers={"X-Employee-Id": "admin001"},
+    )
+    tasks_after_second_cancel = client.get(
+        f"/api/tasks?org_id={data['org']['id']}",
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
+
+    assert first_cancel.status_code == 200
+    assert {task["status"] for task in tasks_after_first_cancel} == {"SUBMITTED"}
+    assert second_cancel.status_code == 200
+    assert {task["status"] for task in tasks_after_second_cancel} == {"DRAFT"}
 
 
 def test_submit_blocks_duplicate_pending_request():

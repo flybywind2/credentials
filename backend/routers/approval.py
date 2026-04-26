@@ -510,6 +510,15 @@ def _approval_has_started(db: Session, request: ApprovalRequest) -> bool:
     ) > 0
 
 
+def _has_other_active_request(db: Session, request: ApprovalRequest) -> bool:
+    return db.scalar(
+        select(func.count(ApprovalRequest.id))
+        .where(ApprovalRequest.organization_id == request.organization_id)
+        .where(ApprovalRequest.id != request.id)
+        .where(ApprovalRequest.status.in_(("PENDING", "IN_PROGRESS")))
+    ) > 0
+
+
 def _request_tasks(db: Session, request: ApprovalRequest) -> list[TaskEntry]:
     return db.scalars(
         select(TaskEntry)
@@ -644,11 +653,12 @@ def cancel_request(
     ).all():
         step.status = "CANCELLED"
         step.acted_at = datetime.now(timezone.utc)
-    for task in db.scalars(
-        select(TaskEntry).where(TaskEntry.organization_id == request.organization_id)
-    ).all():
-        if task.status == "SUBMITTED":
-            task.status = "DRAFT"
+    if not _has_other_active_request(db, request):
+        for task in db.scalars(
+            select(TaskEntry).where(TaskEntry.organization_id == request.organization_id)
+        ).all():
+            if task.status == "SUBMITTED":
+                task.status = "DRAFT"
 
     log_audit(
         db,

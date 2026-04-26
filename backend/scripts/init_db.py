@@ -27,6 +27,9 @@ from backend.seed import (
     TASKS,
 )
 
+APPROVAL_REQUEST_STATUS_CHECK = "status in ('PENDING', 'IN_PROGRESS', 'APPROVED', 'REJECTED', 'CANCELLED')"
+APPROVAL_STEP_STATUS_CHECK = "status in ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')"
+
 
 def _sqlite_connect_args(database_url: str) -> dict[str, bool]:
     if database_url.startswith("sqlite"):
@@ -262,7 +265,74 @@ def _drop_sqlite_indexes(connection, table_name: str) -> None:
         connection.execute(text(f"DROP INDEX {index_name}"))
 
 
+def _quote_mysql_identifier(identifier: str) -> str:
+    return f"`{identifier.replace('`', '``')}`"
+
+
+def _mysql_drop_check_sql(table_name: str, constraint_name: str, is_mariadb: bool = False) -> str:
+    drop_keyword = "DROP CONSTRAINT" if is_mariadb else "DROP CHECK"
+    return (
+        f"ALTER TABLE {_quote_mysql_identifier(table_name)} "
+        f"{drop_keyword} {_quote_mysql_identifier(constraint_name)}"
+    )
+
+
+def _mysql_add_check_sql(table_name: str, constraint_name: str, expression: str) -> str:
+    return (
+        f"ALTER TABLE {_quote_mysql_identifier(table_name)} "
+        f"ADD CONSTRAINT {_quote_mysql_identifier(constraint_name)} CHECK ({expression})"
+    )
+
+
+def _mysql_check_clause(connection, table_name: str, constraint_name: str) -> str | None:
+    return connection.execute(
+        text(
+            """
+            SELECT cc.check_clause
+            FROM information_schema.check_constraints cc
+            JOIN information_schema.table_constraints tc
+              ON cc.constraint_schema = tc.constraint_schema
+             AND cc.constraint_name = tc.constraint_name
+            WHERE tc.table_schema = DATABASE()
+              AND tc.table_name = :table_name
+              AND tc.constraint_name = :constraint_name
+              AND tc.constraint_type = 'CHECK'
+            """
+        ),
+        {"table_name": table_name, "constraint_name": constraint_name},
+    ).scalar_one_or_none()
+
+
+def _ensure_mysql_check_constraint(connection, table_name: str, constraint_name: str, expression: str) -> None:
+    current_clause = _mysql_check_clause(connection, table_name, constraint_name)
+    if current_clause and "CANCELLED" in current_clause.upper():
+        return
+    is_mariadb = bool(getattr(connection.dialect, "is_mariadb", False))
+    if current_clause is not None:
+        connection.execute(text(_mysql_drop_check_sql(table_name, constraint_name, is_mariadb=is_mariadb)))
+    connection.execute(text(_mysql_add_check_sql(table_name, constraint_name, expression)))
+
+
 def _ensure_approval_cancelled_status_constraint(engine) -> None:
+    if engine.dialect.name in {"mysql", "mariadb"}:
+        inspector = inspect(engine)
+        table_names = set(inspector.get_table_names())
+        if not {"approval_requests", "approval_steps"}.issubset(table_names):
+            return
+        with engine.begin() as connection:
+            _ensure_mysql_check_constraint(
+                connection,
+                "approval_requests",
+                "ck_approval_requests_status",
+                APPROVAL_REQUEST_STATUS_CHECK,
+            )
+            _ensure_mysql_check_constraint(
+                connection,
+                "approval_steps",
+                "ck_approval_steps_status",
+                APPROVAL_STEP_STATUS_CHECK,
+            )
+        return
     if engine.dialect.name != "sqlite":
         return
     inspector = inspect(engine)

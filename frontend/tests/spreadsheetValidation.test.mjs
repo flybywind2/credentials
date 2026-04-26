@@ -68,8 +68,12 @@ test("spreadsheet paste modal uses a grid-oriented Excel paste flow", () => {
 
 test("approvalActionForStatus switches to cancel while a pending request is active", () => {
   assert.deepEqual(
-    approvalActionForStatus({ approval_status: "PENDING", active_approval_id: 10 }),
+    approvalActionForStatus({ approval_status: "PENDING", active_approval_id: 10, can_cancel_approval: true }),
     { action: "cancel-approval", label: "요청 취소", className: "danger-button" },
+  );
+  assert.deepEqual(
+    approvalActionForStatus({ approval_status: "PENDING", active_approval_id: 10, can_cancel_approval: false }),
+    { action: "approval-pending", label: "승인 진행 중", className: "secondary-button", disabled: true },
   );
   assert.deepEqual(
     approvalActionForStatus({ approval_status: "CANCELLED", active_approval_id: null }),

@@ -571,13 +571,27 @@ def read_part_status(
             .order_by(ApprovalRequest.created_at.desc(), ApprovalRequest.id.desc())
             .limit(1)
         )
+    latest_requester = db.get(User, latest_request.requested_by) if latest_request else None
+    active_requester = db.get(User, active_request.requested_by) if active_request else None
+    can_cancel_approval = bool(
+        active_request
+        and (
+            user["role"] == "ADMIN"
+            or (
+                active_requester is not None
+                and active_requester.employee_id == user["employee_id"]
+            )
+        )
+    )
     return {
         "organization_id": target_org_id,
         "total_tasks": sum(counts.values()),
         "status_counts": counts,
         "approval_id": latest_request.id if latest_request else None,
         "approval_status": latest_request.status if latest_request else "NOT_REQUESTED",
+        "approval_requester_employee_id": latest_requester.employee_id if latest_requester else None,
         "active_approval_id": active_request.id if active_request else None,
+        "can_cancel_approval": can_cancel_approval,
         "current_step": latest_request.current_step if latest_request else None,
         "total_steps": latest_request.total_steps if latest_request else None,
     }

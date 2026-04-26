@@ -168,7 +168,10 @@ function renderOrganizationSelector(organizations, selectedOrganization) {
 
 export function approvalActionForStatus(partStatus = {}) {
   if (partStatus.approval_status === "PENDING" && partStatus.active_approval_id) {
-    return { action: "cancel-approval", label: "요청 취소", className: "danger-button" };
+    if (partStatus.can_cancel_approval) {
+      return { action: "cancel-approval", label: "요청 취소", className: "danger-button" };
+    }
+    return { action: "approval-pending", label: "승인 진행 중", className: "secondary-button", disabled: true };
   }
   return { action: "submit-approval", label: "승인 요청", className: "primary-button" };
 }
@@ -807,7 +810,7 @@ export async function renderSpreadsheet(container, options = {}) {
             <input id="task-excel-import" type="file" accept=".xlsx" data-action="excel-import">
           </label>
         <button type="button" class="secondary-button" data-action="paste-preview">Excel 붙여넣기</button>
-          <button type="button" class="${approvalAction.className}" data-action="${approvalAction.action}">${approvalAction.label}</button>
+          <button type="button" class="${approvalAction.className}" data-action="${approvalAction.action}" ${approvalAction.disabled ? "disabled" : ""}>${approvalAction.label}</button>
         </div>
       </div>
       ${rejection.has_rejection ? `

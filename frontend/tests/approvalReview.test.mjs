@@ -90,3 +90,10 @@ test("approval view supports direct detail URLs and route navigation", () => {
   assert.match(approvalSource, /navigateTo\("approver", \{ approvalId \}\)/);
   assert.match(approvalSource, /back-to-approvals/);
 });
+
+test("approval list renders subordinate organization status summary", () => {
+  assert.match(approvalSource, /\/api\/approvals\/subordinate-status/);
+  assert.match(approvalSource, /하위 조직 현황/);
+  assert.match(approvalSource, /승인요청 상태/);
+  assert.match(approvalSource, /scope_label/);
+});

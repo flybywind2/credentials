@@ -77,6 +77,48 @@ function isApproverForOrganization(user, organization) {
   ].includes(employeeId));
 }
 
+function sameScopeValue(left, right, key) {
+  const leftValue = left?.[key];
+  const rightValue = right?.[key];
+  return Boolean(leftValue && rightValue && leftValue === rightValue);
+}
+
+function sameScope(left, right, idKey, nameKey) {
+  const hasId = Boolean(left?.[idKey]);
+  const hasName = Boolean(left?.[nameKey]);
+  if (hasId && hasName) {
+    return sameScopeValue(left, right, idKey) && sameScopeValue(left, right, nameKey);
+  }
+  if (hasId) {
+    return sameScopeValue(left, right, idKey);
+  }
+  if (hasName) {
+    return sameScopeValue(left, right, nameKey);
+  }
+  return false;
+}
+
+function matchesApproverManagedScope(user, organization) {
+  const currentOrganization = user?.organization;
+  const employeeId = user?.employee_id;
+  if (!currentOrganization || !organization) {
+    return isApproverForOrganization(user, organization);
+  }
+  if (user?.managed) {
+    return sameScope(currentOrganization, organization, "group_head_id", "group_name");
+  }
+  if (employeeId && currentOrganization.group_head_id === employeeId) {
+    return sameScope(currentOrganization, organization, "group_head_id", "group_name");
+  }
+  if (employeeId && currentOrganization.team_head_id === employeeId) {
+    return sameScope(currentOrganization, organization, "team_head_id", "team_name");
+  }
+  if (employeeId && currentOrganization.division_head_id === employeeId) {
+    return sameScope(currentOrganization, organization, "division_head_id", "division_name");
+  }
+  return isApproverForOrganization(user, organization);
+}
+
 export function editableOrganizationsForUser(user, organizations = []) {
   const currentOrgId = orgIdOf(user);
   const source = Array.isArray(organizations) ? organizations : [];
@@ -85,7 +127,7 @@ export function editableOrganizationsForUser(user, organizations = []) {
   }
   if (user?.role === "APPROVER") {
     const editable = source.filter((organization) => (
-      Number(organization.id) === currentOrgId || isApproverForOrganization(user, organization)
+      Number(organization.id) === currentOrgId || matchesApproverManagedScope(user, organization)
     ));
     return editable.length ? editable : [user.organization].filter(Boolean);
   }

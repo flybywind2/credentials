@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings as runtime_settings
+from backend.database import safe_database_url
 from backend.logging_config import setup_logging
 from backend.routers import approval, auth, dashboard, export, health, operations, organization, part_member, question, settings, task, user_admin
 from backend.scripts.init_db import initialize_database
@@ -17,7 +18,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 setup_logging()
+startup_logger = logging.getLogger("backend.startup")
 validate_runtime_settings(runtime_settings)
+startup_logger.info("database_url=%s", safe_database_url(runtime_settings.database_url))
 initialize_database(database_url=runtime_settings.database_url)
 
 app = FastAPI(title="기밀분류시스템 API")

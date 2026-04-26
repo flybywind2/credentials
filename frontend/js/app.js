@@ -1,6 +1,6 @@
 import { clearEmployeeId, loginWithEmployeeId, loadCurrentUser, savedEmployeeId } from "./auth.js?v=20260422-sso-token";
 import { bindModalAccessibility } from "./modalAccessibility.js?v=20260421-p1b";
-import { renderApproval } from "./approval.js?v=20260425-review-complete";
+import { renderApproval } from "./approval.js?v=20260426-approval-status";
 import { renderDashboard } from "./dashboard.js?v=20260425-admin-scroll";
 import { renderGroupReadonly } from "./groupReadonly.js?v=20260425-group-pagination";
 import { renderPartStatus } from "./partStatus.js?v=20260425-part-member-admin";

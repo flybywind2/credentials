@@ -80,22 +80,71 @@ def _serialize(org: Organization) -> dict:
     }
 
 
+def _scope_condition(id_column, name_column, scope_id: str | None, scope_name: str | None):
+    if scope_id and scope_name:
+        return (id_column == scope_id) & (name_column == scope_name)
+    if scope_id:
+        return id_column == scope_id
+    if scope_name:
+        return name_column == scope_name
+    return None
+
+
 def _scoped_organization_query(user: dict):
     query = select(Organization)
     if user["role"] == "ADMIN":
         return query
     if user["role"] == "INPUTTER":
         return query.where(Organization.id == user["organization_id"])
-    if user.get("managed"):
-        current_org = user.get("organization") or {}
+    employee_id = user["employee_id"]
+    current_org = user.get("organization") or {}
+    if current_org.get("group_head_id") == employee_id:
         group_head_id = current_org.get("group_head_id")
         group_name = current_org.get("group_name")
-        if group_head_id:
-            return query.where(Organization.group_head_id == group_head_id)
-        if group_name:
-            return query.where(Organization.group_name == group_name)
+        condition = _scope_condition(
+            Organization.group_head_id,
+            Organization.group_name,
+            group_head_id,
+            group_name,
+        )
+        if condition is not None:
+            return query.where(condition)
+    if current_org.get("team_head_id") == employee_id:
+        team_head_id = current_org.get("team_head_id")
+        team_name = current_org.get("team_name")
+        condition = _scope_condition(
+            Organization.team_head_id,
+            Organization.team_name,
+            team_head_id,
+            team_name,
+        )
+        if condition is not None:
+            return query.where(condition)
+    if current_org.get("division_head_id") == employee_id:
+        division_head_id = current_org.get("division_head_id")
+        division_name = current_org.get("division_name")
+        condition = _scope_condition(
+            Organization.division_head_id,
+            Organization.division_name,
+            division_head_id,
+            division_name,
+        )
+        if condition is not None:
+            return query.where(condition)
+    if current_org.get("part_head_id") == employee_id:
         return query.where(Organization.id == user["organization_id"])
-    employee_id = user["employee_id"]
+    if user.get("managed"):
+        group_head_id = current_org.get("group_head_id")
+        group_name = current_org.get("group_name")
+        condition = _scope_condition(
+            Organization.group_head_id,
+            Organization.group_name,
+            group_head_id,
+            group_name,
+        )
+        if condition is not None:
+            return query.where(condition)
+        return query.where(Organization.id == user["organization_id"])
     return query.where(
         (Organization.group_head_id == employee_id)
         | (Organization.team_head_id == employee_id)

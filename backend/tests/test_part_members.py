@@ -263,6 +263,47 @@ def test_actual_group_head_can_read_subordinate_part_members(tmp_path):
         app.dependency_overrides.clear()
 
 
+def test_group_head_cannot_read_part_members_for_same_head_other_group(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        org_response = client.post(
+            "/api/admin/organizations",
+            json={
+                "division_name": "인력타그룹실",
+                "division_head_name": "인력타그룹실장",
+                "division_head_id": "members-other-group-div",
+                "team_name": "인력타그룹팀",
+                "team_head_name": "인력타그룹팀장",
+                "team_head_id": "members-other-group-team",
+                "group_name": "인력타그룹",
+                "group_head_name": "박그룹장",
+                "group_head_id": "group001",
+                "part_name": "인력타그룹파트",
+                "part_head_name": "인력타그룹파트장",
+                "part_head_id": "members-other-group-part",
+                "org_type": "NORMAL",
+            },
+            headers={"X-Employee-Id": "admin001"},
+        )
+        assert org_response.status_code == 201
+        org_id = org_response.json()["id"]
+        client.post(
+            f"/api/part-members/import?org_id={org_id}",
+            files={"file": ("members.csv", "파트명,이름,knox_id\n인력타그룹파트,타그룹구성원,other.member\n".encode("utf-8"), "text/csv")},
+            headers={"X-Employee-Id": "admin001"},
+        )
+
+        response = client.get(
+            f"/api/part-members?org_id={org_id}",
+            headers={"X-Employee-Id": "group001"},
+        )
+
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_task_can_be_assigned_to_imported_part_members_by_knox_id(tmp_path):
     client = _client(tmp_path)
 

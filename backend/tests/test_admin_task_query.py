@@ -7,7 +7,7 @@ def test_admin_can_filter_all_tasks_by_org_and_classification():
     client = TestClient(app)
 
     response = client.get(
-        "/api/admin/tasks?part=AI전략&status=DRAFT&is_confidential=true",
+        "/api/admin/tasks?part=AI전략&status=SUBMITTED&is_confidential=true",
         headers={"X-Employee-Id": "admin001"},
     )
 
@@ -15,7 +15,7 @@ def test_admin_can_filter_all_tasks_by_org_and_classification():
     rows = response.json()["items"]
     assert rows
     assert all(row["part_name"].startswith("AI전략") for row in rows)
-    assert all(row["status"] == "DRAFT" for row in rows)
+    assert all(row["status"] == "SUBMITTED" for row in rows)
     assert all(row["is_confidential"] is True for row in rows)
 
 

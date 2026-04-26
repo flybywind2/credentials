@@ -20,7 +20,7 @@ def test_login_maps_part_head_to_inputter_role_and_org():
     assert token_payload["employee_id"] == "part001"
     assert body["user"]["employee_id"] == "part001"
     assert body["user"]["role"] == "INPUTTER"
-    assert body["user"]["organization"]["part_name"] == "AI전략실행파트"
+    assert body["user"]["organization"]["part_name"] == "AI전략기획파트"
 
 
 def test_me_accepts_bearer_token():
@@ -43,7 +43,7 @@ def test_me_uses_employee_id_header_when_present():
     body = response.json()
     assert body["employee_id"] == "group001"
     assert body["role"] == "APPROVER"
-    assert body["organization"]["group_name"] == "AI실행그룹"
+    assert body["organization"]["group_name"] == "AI/IT전략그룹"
 
 
 def test_mock_me_uses_employee_id_header_when_bearer_token_is_for_another_user():

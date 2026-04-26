@@ -29,6 +29,77 @@ function formatRequestedAt(value) {
   return `요청일 ${String(value).replace("T", " ").slice(0, 16)}`;
 }
 
+function formatPlainDateTime(value) {
+  return value ? String(value).replace("T", " ").slice(0, 16) : "-";
+}
+
+function approvalStatusTone(status) {
+  if (status === "APPROVED") {
+    return "status-approved";
+  }
+  if (status === "REJECTED") {
+    return "danger";
+  }
+  if (status === "PENDING") {
+    return "status-submitted";
+  }
+  return "neutral";
+}
+
+function renderApprovalStep(row) {
+  return row.current_step && row.total_steps ? `${row.current_step}/${row.total_steps}` : "-";
+}
+
+function renderSubordinateStatusSummary(summary = {}) {
+  const rows = Array.isArray(summary.rows) ? summary.rows : [];
+  return `
+    <section class="approval-status-panel">
+      <div class="section-header part-member-header">
+        <div>
+          <h3>하위 조직 현황</h3>
+          <p>${escapeHtml(summary.scope_label || "하위 조직 현황")}</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table compact-table">
+          <thead>
+            <tr>
+              <th>구분</th>
+              <th>조직</th>
+              <th>전체</th>
+              <th>UPLOADED</th>
+              <th>DRAFT</th>
+              <th>SUBMITTED</th>
+              <th>APPROVED</th>
+              <th>REJECTED</th>
+              <th>승인요청 상태</th>
+              <th>단계</th>
+              <th>최근 요청일</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length ? rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.unit_type_label || row.unit_type || "-")}</td>
+                <td>${escapeHtml(row.display_name || "-")}</td>
+                <td>${row.task_count || 0}</td>
+                <td>${row.status_counts?.UPLOADED || 0}</td>
+                <td>${row.status_counts?.DRAFT || 0}</td>
+                <td>${row.status_counts?.SUBMITTED || 0}</td>
+                <td>${row.status_counts?.APPROVED || 0}</td>
+                <td>${row.status_counts?.REJECTED || 0}</td>
+                <td>${badge(row.approval_status_label || "미요청", approvalStatusTone(row.approval_status))}</td>
+                <td>${escapeHtml(renderApprovalStep(row))}</td>
+                <td>${escapeHtml(formatPlainDateTime(row.latest_requested_at))}</td>
+              </tr>
+            `).join("") : `<tr><td colspan="11" class="muted-text">조회된 하위 조직이 없습니다.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 export function validateTaskReviewPayload(tasks, reviews, action) {
   const taskIds = new Set(tasks.map((task) => Number(task.id)));
   const reviewIds = new Set(reviews.map((review) => Number(review.task_id)));
@@ -325,7 +396,10 @@ export async function renderApproval(container, context = {}) {
     return;
   }
 
-  const approvals = await fetchJson("/api/approvals/pending");
+  const [approvals, subordinateStatus] = await Promise.all([
+    fetchJson("/api/approvals/pending"),
+    fetchJson("/api/approvals/subordinate-status"),
+  ]);
   container.innerHTML = `
     <section class="workspace">
       <div class="section-header">
@@ -334,6 +408,7 @@ export async function renderApproval(container, context = {}) {
           <p>내 승인 차례인 파트 단위 요청을 검토합니다.</p>
         </div>
       </div>
+      ${renderSubordinateStatusSummary(subordinateStatus)}
       <div class="approval-list">
         ${approvals.length ? approvals.map((approval) => `
           <article class="approval-row" data-approval-id="${approval.id}">

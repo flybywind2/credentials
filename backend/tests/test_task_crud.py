@@ -5,7 +5,13 @@ from fastapi.testclient import TestClient
 from backend.main import app
 
 
-def _create_test_org(client: TestClient, label: str, group_head_id: str, part_head_id: str) -> int:
+def _create_test_org(
+    client: TestClient,
+    label: str,
+    group_head_id: str,
+    part_head_id: str,
+    group_name: str | None = None,
+) -> int:
     response = client.post(
         "/api/admin/organizations",
         json={
@@ -15,7 +21,7 @@ def _create_test_org(client: TestClient, label: str, group_head_id: str, part_he
             "team_name": f"{label}팀",
             "team_head_name": f"{label}팀장",
             "team_head_id": f"{part_head_id}-team",
-            "group_name": f"{label}그룹",
+            "group_name": group_name or f"{label}그룹",
             "group_head_name": f"{label}그룹장",
             "group_head_id": group_head_id,
             "part_name": f"{label}파트",
@@ -245,6 +251,7 @@ def test_group_head_can_update_non_default_subordinate_part_task():
         "하위기본",
         group_head_id=group_head_id,
         part_head_id=f"base{uuid4().hex[:8]}",
+        group_name="하위공통그룹",
     )
     target_part_head_id = f"target{uuid4().hex[:8]}"
     target_org_id = _create_test_org(
@@ -252,6 +259,7 @@ def test_group_head_can_update_non_default_subordinate_part_task():
         "하위대상",
         group_head_id=group_head_id,
         part_head_id=target_part_head_id,
+        group_name="하위공통그룹",
     )
     task_id = None
 
@@ -302,12 +310,14 @@ def test_group_head_can_validate_non_default_subordinate_part_task_rows():
         "하위검증기본",
         group_head_id=group_head_id,
         part_head_id=f"base{uuid4().hex[:8]}",
+        group_name="하위검증공통그룹",
     )
     target_org_id = _create_test_org(
         client,
         "하위검증대상",
         group_head_id=group_head_id,
         part_head_id=f"target{uuid4().hex[:8]}",
+        group_name="하위검증공통그룹",
     )
 
     try:

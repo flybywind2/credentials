@@ -6,27 +6,44 @@ from backend.services.excel import write_workbook
 
 def test_submit_approval_blocks_invalid_confidential_task():
     client = TestClient(app)
+    org = client.post(
+        "/api/admin/organizations",
+        json={
+            "division_name": "제출차단실",
+            "division_head_name": "제출차단실장",
+            "division_head_id": "submitblockdiv1",
+            "part_name": "제출차단파트",
+            "part_head_name": "제출차단파트장",
+            "part_head_id": "submitblockpart1",
+            "org_type": "DIV_DIRECT",
+        },
+        headers={"X-Employee-Id": "admin001"},
+    ).json()
     created = client.post(
         "/api/tasks",
         json={
-            "organization_id": 1,
+            "organization_id": org["id"],
             "major_task": "제출 차단 대업무",
             "detail_task": "제출 차단 세부업무",
             "confidential_answers": [["설계자료"]],
         },
-        headers={"X-Employee-Id": "part001"},
+        headers={"X-Employee-Id": "admin001"},
     ).json()
 
     response = client.post(
-        "/api/approvals/submit?org_id=1",
-        headers={"X-Employee-Id": "part001"},
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers={"X-Employee-Id": "admin001"},
     )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Task validation failed"
-    assert response.json()["validation_errors"][0]["field"] == "conf_data_type"
+    assert any(
+        error["field"] == "conf_data_type"
+        for error in response.json()["validation_errors"]
+    )
 
-    client.delete(f"/api/tasks/{created['id']}", headers={"X-Employee-Id": "part001"})
+    client.delete(f"/api/tasks/{created['id']}", headers={"X-Employee-Id": "admin001"})
+    client.delete(f"/api/admin/organizations/{org['id']}", headers={"X-Employee-Id": "admin001"})
 
 
 def test_admin_can_submit_approval_for_valid_div_direct_org():

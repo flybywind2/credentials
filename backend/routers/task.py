@@ -146,15 +146,51 @@ def _ensure_can_read_task_org(user: dict, org_id: int | None, db: Session) -> No
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 
+def _same_scope_values(scope_id: str | None, scope_name: str | None, org_id: str | None, org_name: str | None) -> bool:
+    if scope_id and scope_name:
+        return org_id == scope_id and org_name == scope_name
+    if scope_id:
+        return org_id == scope_id
+    return bool(scope_name and org_name == scope_name)
+
+
+def _scope_condition(id_column, name_column, scope_id: str | None, scope_name: str | None):
+    if scope_id and scope_name:
+        return (id_column == scope_id) & (name_column == scope_name)
+    if scope_id:
+        return id_column == scope_id
+    if scope_name:
+        return name_column == scope_name
+    return None
+
+
 def _is_approver_subordinate(user: dict, org: Organization | None) -> bool:
     if org is None:
         return False
     employee_id = user["employee_id"]
-    return employee_id in {
-        org.group_head_id,
-        org.team_head_id,
-        org.division_head_id,
-    }
+    current_org = user.get("organization") or {}
+    if current_org.get("group_head_id") == employee_id:
+        return _same_scope_values(
+            current_org.get("group_head_id"),
+            current_org.get("group_name"),
+            org.group_head_id,
+            org.group_name,
+        )
+    if current_org.get("team_head_id") == employee_id:
+        return _same_scope_values(
+            current_org.get("team_head_id"),
+            current_org.get("team_name"),
+            org.team_head_id,
+            org.team_name,
+        )
+    if current_org.get("division_head_id") == employee_id:
+        return _same_scope_values(
+            current_org.get("division_head_id"),
+            current_org.get("division_name"),
+            org.division_head_id,
+            org.division_name,
+        )
+    return False
 
 
 def _same_assigned_group(user: dict, org: Organization | None) -> bool:
@@ -162,10 +198,8 @@ def _same_assigned_group(user: dict, org: Organization | None) -> bool:
         return False
     user_org = user.get("organization") or {}
     user_group_head_id = user_org.get("group_head_id")
-    if user_group_head_id:
-        return org.group_head_id == user_group_head_id
     user_group_name = user_org.get("group_name")
-    return bool(user_group_name and org.group_name == user_group_name)
+    return _same_scope_values(user_group_head_id, user_group_name, org.group_head_id, org.group_name)
 
 
 def _readable_task_query(user: dict, db: Session):
@@ -173,19 +207,47 @@ def _readable_task_query(user: dict, db: Session):
         return select(TaskEntry)
     query = select(TaskEntry).join(Organization, Organization.id == TaskEntry.organization_id)
     if user["role"] == "APPROVER":
-        if user.get("managed"):
-            current_org = db.get(Organization, user["organization_id"])
-            if current_org and current_org.group_head_id:
-                return query.where(Organization.group_head_id == current_org.group_head_id)
-            if current_org and current_org.group_name:
-                return query.where(Organization.group_name == current_org.group_name)
-            return query.where(TaskEntry.organization_id == user["organization_id"])
         employee_id = user["employee_id"]
-        return query.where(
-            (Organization.group_head_id == employee_id)
-            | (Organization.team_head_id == employee_id)
-            | (Organization.division_head_id == employee_id)
-        )
+        current_org = user.get("organization") or {}
+        if current_org.get("group_head_id") == employee_id:
+            condition = _scope_condition(
+                Organization.group_head_id,
+                Organization.group_name,
+                current_org.get("group_head_id"),
+                current_org.get("group_name"),
+            )
+            if condition is not None:
+                return query.where(condition)
+        if current_org.get("team_head_id") == employee_id:
+            condition = _scope_condition(
+                Organization.team_head_id,
+                Organization.team_name,
+                current_org.get("team_head_id"),
+                current_org.get("team_name"),
+            )
+            if condition is not None:
+                return query.where(condition)
+        if current_org.get("division_head_id") == employee_id:
+            condition = _scope_condition(
+                Organization.division_head_id,
+                Organization.division_name,
+                current_org.get("division_head_id"),
+                current_org.get("division_name"),
+            )
+            if condition is not None:
+                return query.where(condition)
+        if user.get("managed"):
+            assigned_org = db.get(Organization, user["organization_id"])
+            condition = _scope_condition(
+                Organization.group_head_id,
+                Organization.group_name,
+                assigned_org.group_head_id if assigned_org else None,
+                assigned_org.group_name if assigned_org else None,
+            )
+            if condition is not None:
+                return query.where(condition)
+            return query.where(TaskEntry.organization_id == user["organization_id"])
+        return query.where(TaskEntry.organization_id == user["organization_id"])
     return query.where(TaskEntry.organization_id == user["organization_id"])
 
 
@@ -480,12 +542,17 @@ def list_same_group_tasks(
     query = select(TaskEntry).join(Organization, Organization.id == TaskEntry.organization_id)
     if user["role"] == "ADMIN":
         pass
-    elif current_org.group_head_id:
-        query = query.where(Organization.group_head_id == current_org.group_head_id)
-    elif current_org.group_name:
-        query = query.where(Organization.group_name == current_org.group_name)
     else:
-        query = query.where(TaskEntry.organization_id == current_org.id)
+        condition = _scope_condition(
+            Organization.group_head_id,
+            Organization.group_name,
+            current_org.group_head_id,
+            current_org.group_name,
+        )
+        if condition is not None:
+            query = query.where(condition)
+        else:
+            query = query.where(TaskEntry.organization_id == current_org.id)
     return [_serialize_task(db, task) for task in db.scalars(query).all()]
 
 

@@ -29,17 +29,37 @@ def _target_org_id(user: dict, org_id: int | None) -> int:
     return org_id or user["organization_id"]
 
 
+def _same_scope(user_org: dict, org: Organization, id_field: str, name_field: str) -> bool:
+    scope_id = user_org.get(id_field)
+    scope_name = user_org.get(name_field)
+    org_id = getattr(org, id_field)
+    org_name = getattr(org, name_field)
+    if scope_id and scope_name:
+        return org_id == scope_id and org_name == scope_name
+    if scope_id:
+        return org_id == scope_id
+    return bool(scope_name and org_name == scope_name)
+
+
+def _is_actual_approver_scope(user: dict, org: Organization) -> bool:
+    employee_id = user["employee_id"]
+    current_org = user.get("organization") or {}
+    if current_org.get("group_head_id") == employee_id:
+        return _same_scope(current_org, org, "group_head_id", "group_name")
+    if current_org.get("team_head_id") == employee_id:
+        return _same_scope(current_org, org, "team_head_id", "team_name")
+    if current_org.get("division_head_id") == employee_id:
+        return _same_scope(current_org, org, "division_head_id", "division_name")
+    return False
+
+
 def _ensure_can_read_org(user: dict, db: Session, org_id: int) -> None:
     if user["role"] == "ADMIN":
         return
     if user["role"] == "INPUTTER" and user["organization_id"] == org_id:
         return
     org = db.get(Organization, org_id)
-    if user["role"] == "APPROVER" and org is not None and user["employee_id"] in {
-        org.group_head_id,
-        org.team_head_id,
-        org.division_head_id,
-    }:
+    if user["role"] == "APPROVER" and org is not None and _is_actual_approver_scope(user, org):
         return
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 

@@ -78,6 +78,58 @@ test("editableOrganizationsForUser returns subordinate parts for approvers", () 
   );
 });
 
+test("editableOrganizationsForUser limits group approvers to their managed group", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "group001",
+    organization_id: 1,
+    organization: {
+      id: 1,
+      team_head_id: "team001",
+      group_head_id: "group001",
+      group_name: "AI/IT전략그룹",
+      part_name: "A",
+    },
+  };
+  const organizations = [
+    { id: 1, team_head_id: "team001", group_head_id: "group001", group_name: "AI/IT전략그룹", part_name: "A" },
+    { id: 2, team_head_id: "team001", group_head_id: "group001", group_name: "AI/IT전략그룹", part_name: "B" },
+    { id: 3, team_head_id: "team001", group_head_id: "other", group_name: "정보전략팀", part_head_id: "group001", part_name: "C" },
+    { id: 4, team_head_id: "team001", group_head_id: "group001", group_name: "승인알림그룹", part_name: "D" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [1, 2],
+  );
+});
+
+test("editableOrganizationsForUser uses assigned group scope for managed approvers", () => {
+  const user = {
+    role: "APPROVER",
+    employee_id: "manager001",
+    managed: true,
+    organization_id: 10,
+    organization: {
+      id: 10,
+      group_head_id: "managed-group",
+      group_name: "관리그룹",
+      part_name: "관리파트A",
+    },
+  };
+  const organizations = [
+    { id: 10, group_head_id: "managed-group", group_name: "관리그룹", part_name: "관리파트A" },
+    { id: 11, group_head_id: "managed-group", group_name: "관리그룹", part_name: "관리파트B" },
+    { id: 12, group_head_id: "managed-group", group_name: "다른관리그룹", part_name: "관리파트C" },
+    { id: 13, group_head_id: "other", group_name: "관리그룹", part_name: "관리파트D" },
+  ];
+
+  assert.deepEqual(
+    editableOrganizationsForUser(user, organizations).map((org) => org.id),
+    [10, 11],
+  );
+});
+
 test("selectedEditableOrganization accepts selected subordinate part and falls back to current org", () => {
   const user = {
     role: "APPROVER",

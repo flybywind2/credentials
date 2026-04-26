@@ -79,7 +79,7 @@ def test_admin_can_create_update_and_delete_user_permission():
     assert create_response.status_code == 201
     created = create_response.json()
     assert created["employee_id"] == employee_id
-    assert created["organization"]["part_name"] == "AI전략실행파트"
+    assert created["organization"]["part_name"] == "AI전략기획파트"
 
     update_response = client.put(
         f"/api/admin/users/{employee_id}",

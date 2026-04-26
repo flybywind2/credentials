@@ -12,6 +12,7 @@ from backend.config import settings
 from backend.database import get_db
 from backend.dependencies import ensure_can_write_org, get_current_user, require_approver_or_admin
 from backend.models import ApprovalRequest, ApprovalStep, ApprovalTaskReview, Organization, TaskEntry, User
+from backend.routers.organization import _scoped_organization_query
 from backend.services.audit import log_audit
 from backend.services.approval_flow import build_approval_path
 from backend.services.collection import ensure_collection_open
@@ -39,6 +40,20 @@ class ApprovalActionRequest(BaseModel):
 
 class EditRequest(BaseModel):
     reason: str = Field(min_length=1)
+
+
+TASK_STATUSES = ("UPLOADED", "DRAFT", "SUBMITTED", "APPROVED", "REJECTED")
+APPROVAL_STATUS_LABELS = {
+    "NOT_REQUESTED": "미요청",
+    "PENDING": "승인대기",
+    "APPROVED": "승인완료",
+    "REJECTED": "반려",
+}
+UNIT_TYPE_LABELS = {
+    "PART": "파트",
+    "GROUP": "그룹",
+    "TEAM": "팀",
+}
 
 
 def _approval_detail_url(approval_id: int) -> str:
@@ -154,6 +169,103 @@ def _serialize_task_reviews(db: Session, approval_request_id: int) -> list[dict]
     return rows
 
 
+def _unit_for_status(user: dict, org: Organization) -> tuple[str, str, str]:
+    current_org = user.get("organization") or {}
+    employee_id = user["employee_id"]
+    if user["role"] == "ADMIN":
+        return "PART", f"part:{org.id}", org.part_name
+    if current_org.get("group_head_id") == employee_id:
+        return "PART", f"part:{org.id}", org.part_name
+    if current_org.get("team_head_id") == employee_id:
+        if org.group_name:
+            return "GROUP", f"group:{org.team_name}:{org.group_name}", org.group_name
+        return "PART", f"part:{org.id}", org.part_name
+    if current_org.get("division_head_id") == employee_id:
+        if org.team_name:
+            return "TEAM", f"team:{org.division_name}:{org.team_name}", org.team_name
+        return "PART", f"part:{org.id}", org.part_name
+    if user.get("managed"):
+        return "PART", f"part:{org.id}", org.part_name
+    return "PART", f"part:{org.id}", org.part_name
+
+
+def _scope_label_for_status(user: dict) -> str:
+    current_org = user.get("organization") or {}
+    employee_id = user["employee_id"]
+    if user["role"] == "ADMIN":
+        return "전체현황"
+    if current_org.get("group_head_id") == employee_id:
+        return "파트현황"
+    if current_org.get("team_head_id") == employee_id:
+        return "그룹현황"
+    if current_org.get("division_head_id") == employee_id:
+        return "실현황"
+    if user.get("managed"):
+        return "파트현황"
+    return "하위 조직 현황"
+
+
+def _latest_requests_by_org(db: Session, organization_ids: list[int]) -> dict[int, ApprovalRequest]:
+    if not organization_ids:
+        return {}
+    latest_by_org = {}
+    requests = db.scalars(
+        select(ApprovalRequest)
+        .where(ApprovalRequest.organization_id.in_(organization_ids))
+        .order_by(ApprovalRequest.created_at.desc(), ApprovalRequest.id.desc())
+    ).all()
+    for request in requests:
+        latest_by_org.setdefault(request.organization_id, request)
+    return latest_by_org
+
+
+def _task_counts_by_org(db: Session, organization_ids: list[int]) -> dict[int, dict[str, int]]:
+    counts = {
+        org_id: {status_name: 0 for status_name in TASK_STATUSES}
+        for org_id in organization_ids
+    }
+    if not organization_ids:
+        return counts
+    rows = db.execute(
+        select(TaskEntry.organization_id, TaskEntry.status, func.count(TaskEntry.id))
+        .where(TaskEntry.organization_id.in_(organization_ids))
+        .group_by(TaskEntry.organization_id, TaskEntry.status)
+    ).all()
+    for org_id, status_name, count in rows:
+        counts.setdefault(org_id, {status: 0 for status in TASK_STATUSES})[status_name] = count
+    return counts
+
+
+def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
+    status_counts = {"PENDING": 0, "APPROVED": 0, "REJECTED": 0}
+    for request in requests:
+        if request.status in status_counts:
+            status_counts[request.status] += 1
+    if status_counts["PENDING"]:
+        status = "PENDING"
+    elif status_counts["REJECTED"]:
+        status = "REJECTED"
+    elif status_counts["APPROVED"]:
+        status = "APPROVED"
+    else:
+        status = "NOT_REQUESTED"
+    latest = max(
+        requests,
+        key=lambda request: (request.created_at or datetime.min.replace(tzinfo=timezone.utc), request.id),
+        default=None,
+    )
+    return {
+        "approval_status": status,
+        "approval_status_label": APPROVAL_STATUS_LABELS[status],
+        "pending_count": status_counts["PENDING"],
+        "approved_count": status_counts["APPROVED"],
+        "rejected_count": status_counts["REJECTED"],
+        "latest_requested_at": latest.created_at.isoformat() if latest and latest.created_at else None,
+        "current_step": latest.current_step if latest else None,
+        "total_steps": latest.total_steps if latest else None,
+    }
+
+
 def _submission_errors(tasks: list[TaskEntry]) -> list[dict]:
     errors = []
     for task in tasks:
@@ -228,6 +340,61 @@ def list_pending_approvals(
             }
         )
     return rows
+
+
+@router.get("/subordinate-status")
+def read_subordinate_approval_status(
+    user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    require_approver_or_admin(user)
+    organizations = db.scalars(_scoped_organization_query(user).order_by(Organization.id)).all()
+    organization_ids = [org.id for org in organizations]
+    task_counts_by_org = _task_counts_by_org(db, organization_ids)
+    latest_requests = _latest_requests_by_org(db, organization_ids)
+    rows_by_key: dict[str, dict] = {}
+
+    for org in organizations:
+        unit_type, key, display_name = _unit_for_status(user, org)
+        row = rows_by_key.setdefault(
+            key,
+            {
+                "key": key,
+                "unit_type": unit_type,
+                "unit_type_label": UNIT_TYPE_LABELS[unit_type],
+                "display_name": display_name,
+                "division_name": org.division_name,
+                "team_name": org.team_name,
+                "group_name": org.group_name,
+                "part_name": org.part_name if unit_type == "PART" else None,
+                "organization_ids": [],
+                "organization_count": 0,
+                "task_count": 0,
+                "status_counts": {status_name: 0 for status_name in TASK_STATUSES},
+                "_approval_requests": [],
+            },
+        )
+        row["organization_ids"].append(org.id)
+        row["organization_count"] += 1
+        org_counts = task_counts_by_org.get(org.id, {})
+        for status_name in TASK_STATUSES:
+            count = org_counts.get(status_name, 0)
+            row["status_counts"][status_name] += count
+            row["task_count"] += count
+        latest_request = latest_requests.get(org.id)
+        if latest_request is not None:
+            row["_approval_requests"].append(latest_request)
+
+    rows = []
+    for row in rows_by_key.values():
+        approval_summary = _approval_summary_for_requests(row.pop("_approval_requests"))
+        row.update(approval_summary)
+        rows.append(row)
+
+    return {
+        "scope_label": _scope_label_for_status(user),
+        "rows": rows,
+    }
 
 
 def _current_step(db: Session, request: ApprovalRequest) -> ApprovalStep:

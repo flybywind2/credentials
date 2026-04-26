@@ -1,6 +1,7 @@
 from sqlalchemy import text
 
 from backend.database import SessionLocal, engine
+from backend.database import safe_database_url
 
 
 def test_database_engine_can_execute_sql():
@@ -18,3 +19,10 @@ def test_database_session_can_execute_sql():
         db.close()
 
     assert result == 1
+
+
+def test_safe_database_url_masks_password():
+    url = safe_database_url("mysql+pymysql://user:secret-pass@db.example.com:3306/credential")
+
+    assert "secret-pass" not in url
+    assert "user:***@db.example.com:3306/credential" in url

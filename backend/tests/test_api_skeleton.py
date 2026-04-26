@@ -14,14 +14,14 @@ def test_organizations_returns_sample_list():
     client = TestClient(app)
     response = client.get("/api/organizations")
     assert response.status_code == 200
-    assert response.json()[0]["part_name"] == "AI전략실행파트"
+    assert response.json()[0]["part_name"] == "AI전략기획파트"
 
 
 def test_tasks_returns_sample_entries():
     client = TestClient(app)
     response = client.get("/api/tasks")
     assert response.status_code == 200
-    assert response.json()[0]["major_task"] == "기밀 분류 체계 수립"
+    assert response.json()[0]["major_task"] == "AI 과제 포트폴리오 관리"
 
 
 def test_questions_returns_confidential_and_national_tech_questions():

@@ -120,6 +120,123 @@ def test_pending_approvals_are_filtered_by_current_approver():
     assert body[0]["part_name"] == "AI전략기획파트"
 
 
+def test_current_team_approver_can_read_tasks_for_assigned_approval_even_when_team_name_differs():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    approval_id = None
+    suffix = uuid4().hex[:8]
+    org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"팀승인실-{suffix}",
+            "division_head_name": "팀승인실장",
+            "division_head_id": f"team-approval-div-{suffix}",
+            "team_name": f"팀승인팀-{suffix}",
+            "team_head_name": "팀승인팀장",
+            "team_head_id": "team001",
+            "part_name": f"팀승인파트-{suffix}",
+            "part_head_name": "팀승인파트장",
+            "part_head_id": f"team-approval-part-{suffix}",
+            "org_type": "TEAM_DIRECT",
+        },
+    )
+    assert org_response.status_code == 201
+    org = org_response.json()
+    task_response = client.post(
+        "/api/tasks",
+        headers=admin_headers,
+        json={
+            "organization_id": org["id"],
+            "major_task": "팀장 승인 대업무",
+            "detail_task": "현재 승인자인 팀장이 상세 업무를 조회해야 한다.",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+    )
+    assert task_response.status_code == 201
+    submit_response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers=admin_headers,
+    )
+    assert submit_response.status_code == 201
+    approval_id = submit_response.json()["id"]
+    assert submit_response.json()["steps"][0]["approver_employee_id"] == "team001"
+
+    try:
+        pending_response = client.get("/api/approvals/pending", headers={"X-Employee-Id": "team001"})
+        tasks_response = client.get(f"/api/tasks?org_id={org['id']}", headers={"X-Employee-Id": "team001"})
+
+        assert approval_id in {item["id"] for item in pending_response.json()}
+        assert tasks_response.status_code == 200
+        assert task_response.json()["id"] in {item["id"] for item in tasks_response.json()}
+    finally:
+        if approval_id is not None:
+            with SessionLocal() as db:
+                db.execute(delete(ApprovalStep).where(ApprovalStep.approval_request_id == approval_id))
+                db.execute(delete(ApprovalRequest).where(ApprovalRequest.id == approval_id))
+                db.commit()
+        client.delete(f"/api/tasks/{task_response.json()['id']}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{org['id']}", headers=admin_headers)
+
+
+def test_current_division_approver_can_read_tasks_for_assigned_approval_even_when_division_name_differs():
+    client = TestClient(app)
+    admin_headers = {"X-Employee-Id": "admin001"}
+    approval_id = None
+    suffix = uuid4().hex[:8]
+    org_response = client.post(
+        "/api/admin/organizations",
+        headers=admin_headers,
+        json={
+            "division_name": f"실승인실-{suffix}",
+            "division_head_name": "실승인실장",
+            "division_head_id": "div001",
+            "part_name": f"실승인파트-{suffix}",
+            "part_head_name": "실승인파트장",
+            "part_head_id": f"div-approval-part-{suffix}",
+            "org_type": "DIV_DIRECT",
+        },
+    )
+    assert org_response.status_code == 201
+    org = org_response.json()
+    task_response = client.post(
+        "/api/tasks",
+        headers=admin_headers,
+        json={
+            "organization_id": org["id"],
+            "major_task": "실장 승인 대업무",
+            "detail_task": "현재 승인자인 실장이 상세 업무를 조회해야 한다.",
+            "confidential_answers": [["해당 없음"]],
+            "national_tech_answers": [["해당 없음"]],
+        },
+    )
+    assert task_response.status_code == 201
+    submit_response = client.post(
+        f"/api/approvals/submit?org_id={org['id']}",
+        headers=admin_headers,
+    )
+    assert submit_response.status_code == 201
+    approval_id = submit_response.json()["id"]
+    assert submit_response.json()["steps"][0]["approver_employee_id"] == "div001"
+
+    try:
+        pending_response = client.get("/api/approvals/pending", headers={"X-Employee-Id": "div001"})
+        tasks_response = client.get(f"/api/tasks?org_id={org['id']}", headers={"X-Employee-Id": "div001"})
+
+        assert approval_id in {item["id"] for item in pending_response.json()}
+        assert tasks_response.status_code == 200
+        assert task_response.json()["id"] in {item["id"] for item in tasks_response.json()}
+    finally:
+        if approval_id is not None:
+            with SessionLocal() as db:
+                db.execute(delete(ApprovalStep).where(ApprovalStep.approval_request_id == approval_id))
+                db.execute(delete(ApprovalRequest).where(ApprovalRequest.id == approval_id))
+                db.commit()
+        client.delete(f"/api/tasks/{task_response.json()['id']}", headers=admin_headers)
+        client.delete(f"/api/admin/organizations/{org['id']}", headers=admin_headers)
+
+
 def test_admin_can_see_pending_approvals_from_database():
     client = TestClient(app)
 

@@ -10,6 +10,7 @@ from backend.database import get_db
 from backend.dependencies import ensure_can_write_org, get_current_user, require_admin
 from backend.models import (
     ApprovalRequest,
+    ApprovalStep,
     ApprovalTaskReview,
     Organization,
     PartMember,
@@ -143,6 +144,8 @@ def _ensure_can_read_task_org(user: dict, org_id: int | None, db: Session) -> No
         return
     if user["role"] == "APPROVER" and _is_approver_subordinate(user, org):
         return
+    if _is_current_approval_step_for_org(user, org_id, db):
+        return
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 
@@ -200,6 +203,21 @@ def _same_assigned_group(user: dict, org: Organization | None) -> bool:
     user_group_head_id = user_org.get("group_head_id")
     user_group_name = user_org.get("group_name")
     return _same_scope_values(user_group_head_id, user_group_name, org.group_head_id, org.group_name)
+
+
+def _is_current_approval_step_for_org(user: dict, org_id: int | None, db: Session) -> bool:
+    if org_id is None or user["role"] != "APPROVER":
+        return False
+    step_count = db.scalar(
+        select(func.count(ApprovalStep.id))
+        .join(ApprovalRequest, ApprovalRequest.id == ApprovalStep.approval_request_id)
+        .where(ApprovalRequest.organization_id == org_id)
+        .where(ApprovalRequest.status == "PENDING")
+        .where(ApprovalStep.status == "PENDING")
+        .where(ApprovalStep.step_order == ApprovalRequest.current_step)
+        .where(ApprovalStep.approver_employee_id == user["employee_id"])
+    )
+    return bool(step_count)
 
 
 def _readable_task_query(user: dict, db: Session):
@@ -544,6 +562,13 @@ def list_tasks(
     org_id: int | None = None,
 ):
     _ensure_can_read_task_org(user, org_id, db)
+    if org_id is not None and _is_current_approval_step_for_org(user, org_id, db):
+        return [
+            _serialize_task(db, task)
+            for task in db.scalars(
+                select(TaskEntry).where(TaskEntry.organization_id == org_id)
+            ).all()
+        ]
     query = _readable_task_query(user, db)
     if org_id is not None:
         query = query.where(TaskEntry.organization_id == org_id)

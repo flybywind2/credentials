@@ -17,6 +17,7 @@ import {
 const spreadsheetSource = readFileSync(new URL("../js/spreadsheet.js", import.meta.url), "utf8");
 const formSource = readFileSync(new URL("../js/form.js", import.meta.url), "utf8");
 const partMembersSource = readFileSync(new URL("../js/partMembers.js", import.meta.url), "utf8");
+const spreadsheetModule = await import("../js/spreadsheet.js");
 
 test("groupValidationErrors groups backend cell errors by row", () => {
   const grouped = groupValidationErrors([
@@ -196,6 +197,25 @@ test("selectedEditableOrganization accepts selected subordinate part and falls b
 
   assert.equal(selectedEditableOrganization(user, organizations, 2).id, 2);
   assert.equal(selectedEditableOrganization(user, organizations, 999).id, 1);
+});
+
+test("approver organization selector stays visible with a single managed part", () => {
+  assert.equal(
+    typeof spreadsheetModule.shouldShowOrganizationSelector,
+    "function",
+  );
+  assert.equal(
+    spreadsheetModule.shouldShowOrganizationSelector({ role: "APPROVER" }, [{ id: 1 }]),
+    true,
+  );
+  assert.equal(
+    spreadsheetModule.shouldShowOrganizationSelector({ role: "INPUTTER" }, [{ id: 1 }]),
+    false,
+  );
+  assert.equal(
+    spreadsheetModule.shouldShowOrganizationSelector({ role: "APPROVER" }, []),
+    false,
+  );
 });
 
 test("spreadsheet source marks fixed columns for sticky layout", () => {

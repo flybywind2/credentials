@@ -6,7 +6,8 @@ import {
   editableOrganizationsForUser,
   orgPathOfOrganization,
   selectedEditableOrganization,
-} from "./spreadsheet.js?v=20260426-status-part";
+  shouldShowOrganizationSelector,
+} from "./spreadsheet.js?v=20260426-part-selector";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -36,8 +37,8 @@ function memberRows(members) {
   `).join("");
 }
 
-function renderStatusOrganizationSelector(organizations, selectedOrganization) {
-  if (organizations.length <= 1) {
+function renderStatusOrganizationSelector(user, organizations, selectedOrganization) {
+  if (!shouldShowOrganizationSelector(user, organizations)) {
     return "";
   }
   return `
@@ -79,7 +80,7 @@ export async function renderPartStatus(container, options = {}) {
           <p>${escapeHtml(orgPathOfOrganization(selectedOrganization))}</p>
         </div>
         <div class="toolbar">
-          ${renderStatusOrganizationSelector(editableOrganizations, selectedOrganization)}
+          ${renderStatusOrganizationSelector(currentUser, editableOrganizations, selectedOrganization)}
           <span class="badge ${deadline.is_closed ? "danger" : "status"}">${formatDday(deadline)}</span>
         </div>
       </div>

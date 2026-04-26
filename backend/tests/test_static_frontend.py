@@ -11,6 +11,14 @@ def test_root_serves_frontend_html():
     assert "/assets/favicon.svg" in response.text
 
 
+def test_frontend_cache_keys_include_latest_visual_modules():
+    client = TestClient(app)
+    response = client.get("/")
+
+    assert "/css/style.css?v=20260426-visual-refresh" in response.text
+    assert "/js/app.js?v=20260426-part-selector" in response.text
+
+
 def test_known_spa_paths_serve_frontend_html():
     client = TestClient(app)
 

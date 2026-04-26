@@ -155,8 +155,12 @@ export function selectedEditableOrganization(user, organizations = [], selectedO
   );
 }
 
-function renderOrganizationSelector(organizations, selectedOrganization) {
-  if (organizations.length <= 1) {
+export function shouldShowOrganizationSelector(user, organizations = []) {
+  return ["APPROVER", "ADMIN"].includes(user?.role) && Array.isArray(organizations) && organizations.length > 0;
+}
+
+function renderOrganizationSelector(user, organizations, selectedOrganization) {
+  if (!shouldShowOrganizationSelector(user, organizations)) {
     return "";
   }
   return `
@@ -813,7 +817,7 @@ export async function renderSpreadsheet(container, options = {}) {
           <p>${escapeHtml(orgPathOfOrganization(selectedOrganization) || orgPathOf(currentUser))}</p>
         </div>
         <div class="toolbar">
-          ${renderOrganizationSelector(editableOrganizations, selectedOrganization)}
+          ${renderOrganizationSelector(currentUser, editableOrganizations, selectedOrganization)}
           <button type="button" class="secondary-button" data-action="input-guide">입력 가이드</button>
           <button
             type="button"

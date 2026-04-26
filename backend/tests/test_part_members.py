@@ -101,6 +101,75 @@ AI전략실행파트,홍길동,hong.gildong
         app.dependency_overrides.clear()
 
 
+def test_part_member_import_append_mode_keeps_existing_members(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        first_import = client.post(
+            "/api/part-members/import?org_id=1&mode=replace",
+            files={
+                "file": (
+                    "members.csv",
+                    "파트명,이름,knox_id\nAI전략실행파트,기존구성원,existing.member\n".encode("utf-8"),
+                    "text/csv",
+                )
+            },
+            headers={"X-Employee-Id": "admin001"},
+        )
+        append_import = client.post(
+            "/api/part-members/import?org_id=1&mode=append",
+            files={
+                "file": (
+                    "members.csv",
+                    "파트명,이름,knox_id\nAI전략실행파트,추가구성원,added.member\n".encode("utf-8"),
+                    "text/csv",
+                )
+            },
+            headers={"X-Employee-Id": "admin001"},
+        )
+        listed = client.get("/api/part-members?org_id=1", headers={"X-Employee-Id": "admin001"}).json()
+
+        assert first_import.status_code == 201
+        assert append_import.status_code == 201
+        assert {member["knox_id"] for member in listed} >= {"existing.member", "added.member"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_part_member_import_replace_mode_removes_existing_members(tmp_path):
+    client = _client(tmp_path)
+
+    try:
+        client.post(
+            "/api/part-members/import?org_id=1&mode=replace",
+            files={
+                "file": (
+                    "members.csv",
+                    "파트명,이름,knox_id\nAI전략실행파트,기존구성원,existing.member\n".encode("utf-8"),
+                    "text/csv",
+                )
+            },
+            headers={"X-Employee-Id": "admin001"},
+        )
+        replace_import = client.post(
+            "/api/part-members/import?org_id=1&mode=replace",
+            files={
+                "file": (
+                    "members.csv",
+                    "파트명,이름,knox_id\nAI전략실행파트,교체구성원,replaced.member\n".encode("utf-8"),
+                    "text/csv",
+                )
+            },
+            headers={"X-Employee-Id": "admin001"},
+        )
+        listed = client.get("/api/part-members?org_id=1", headers={"X-Employee-Id": "admin001"}).json()
+
+        assert replace_import.status_code == 201
+        assert {member["knox_id"] for member in listed} == {"replaced.member"}
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_all_part_member_import_rejects_unknown_or_duplicate_part_name(tmp_path):
     client = _client(tmp_path)
 

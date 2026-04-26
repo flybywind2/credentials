@@ -45,12 +45,12 @@ function memberRows(members) {
   `).join("");
 }
 
-async function importPartMembers(orgId, file) {
+async function importPartMembers(orgId, file, mode = "append") {
   const formData = new FormData();
   formData.append("file", file);
   const url = orgId === "__all__"
-    ? "/api/part-members/import?scope=all"
-    : `/api/part-members/import?org_id=${encodeURIComponent(orgId)}`;
+    ? `/api/part-members/import?scope=all&mode=${encodeURIComponent(mode)}`
+    : `/api/part-members/import?org_id=${encodeURIComponent(orgId)}&mode=${encodeURIComponent(mode)}`;
   const response = await fetch(url, {
     method: "POST",
     headers: authHeaders(),
@@ -76,7 +76,7 @@ export async function renderPartMemberManager(container) {
       <div class="section-header part-member-header">
         <div>
           <h2>파트원 명단 CSV 업로드</h2>
-          <p>대상 조직을 선택하거나 전체 일괄 업로드로 모든 파트원 명단을 CSV로 교체합니다. CSV 헤더: 파트명, 이름, knox_id</p>
+          <p>대상 조직을 선택하거나 전체 일괄 업로드로 파트원 명단을 반영합니다. CSV 헤더: 파트명, 이름, knox_id</p>
         </div>
       </div>
       <div class="admin-import-box part-member-import-box">
@@ -86,6 +86,17 @@ export async function renderPartMemberManager(container) {
         <label>CSV 파일
           <input type="file" name="part_member_csv" accept=".csv,text/csv">
         </label>
+        <div class="radio-group" role="radiogroup" aria-label="파트원 CSV 반영 방식">
+          <label class="choice-chip">
+            <input type="radio" name="part_member_import_mode" value="append" checked>
+            <span>해당 내용만 추가/수정</span>
+          </label>
+          <label class="choice-chip">
+            <input type="radio" name="part_member_import_mode" value="replace">
+            <span>전체 덮어쓰기</span>
+          </label>
+        </div>
+        <p class="muted-text">추가/수정은 기존 명단을 유지하고 같은 knox_id만 갱신합니다. 전체 덮어쓰기는 선택 범위의 기존 명단을 CSV 내용으로 교체합니다.</p>
         <p class="field-error" data-part-member-error></p>
         <div class="question-admin-actions">
           <button type="button" class="primary-button" data-action="import-part-members">CSV 업로드</button>
@@ -109,6 +120,7 @@ export async function renderPartMemberManager(container) {
 
   const organizationSelect = container.querySelector("[name='organization_id']");
   const fileInput = container.querySelector("[name='part_member_csv']");
+  const importModeInput = () => container.querySelector("[name='part_member_import_mode']:checked");
   const errorPanel = container.querySelector("[data-part-member-error]");
   let currentMembers = [];
   let currentPage = 1;
@@ -150,7 +162,7 @@ export async function renderPartMemberManager(container) {
       return;
     }
     try {
-      const result = await importPartMembers(organizationSelect.value, file);
+      const result = await importPartMembers(organizationSelect.value, file, importModeInput()?.value || "append");
       errorPanel.textContent = `${result.imported_count}명을 반영했습니다.`;
       fileInput.value = "";
       currentPage = 1;

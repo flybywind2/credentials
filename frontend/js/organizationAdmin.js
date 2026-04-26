@@ -1,4 +1,4 @@
-import { fetchJson } from "./api.js?v=20260426-validation-errors";
+import { currentAccessToken, currentEmployeeId, fetchJson } from "./api.js?v=20260426-validation-errors";
 import { paginateItems, renderPaginationControls } from "./pagination.js?v=20260425-admin-scroll";
 
 const CSV_HEADERS = [
@@ -38,6 +38,25 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function authHeaders() {
+  const employeeId = currentEmployeeId();
+  const accessToken = currentAccessToken();
+  return {
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(employeeId ? { "X-Employee-Id": employeeId } : {}),
+  };
+}
+
+async function importErrorMessage(response, prefix) {
+  try {
+    const body = await response.json();
+    const detail = typeof body.detail === "string" ? body.detail : "";
+    return detail ? `${prefix}: ${detail}` : `${prefix}: ${response.status}`;
+  } catch {
+    return `${prefix}: ${response.status}`;
+  }
 }
 
 function parseCsvRows(text) {
@@ -240,6 +259,17 @@ export async function renderOrganizationManager(container) {
         </form>
         <div class="admin-import-box">
           <h3>CSV 업로드</h3>
+          <div class="radio-group" role="radiogroup" aria-label="조직 CSV 반영 방식">
+            <label class="choice-chip">
+              <input type="radio" name="organization_import_mode" value="append" checked>
+              <span>해당 내용만 추가/수정</span>
+            </label>
+            <label class="choice-chip">
+              <input type="radio" name="organization_import_mode" value="replace">
+              <span>전체 덮어쓰기</span>
+            </label>
+          </div>
+          <p class="muted-text">추가/수정은 기존 조직을 유지하고 같은 조직 경로만 갱신합니다. 전체 덮어쓰기는 CSV에 없는 미사용 조직을 삭제합니다.</p>
           <input type="file" name="organization_csv" accept=".csv,text/csv">
           <p class="field-error" data-import-error></p>
           <div data-import-preview>${renderPreview([])}</div>
@@ -349,15 +379,16 @@ export async function renderOrganizationManager(container) {
     if (!selectedCsvFile) {
       return;
     }
+    const importMode = container.querySelector("[name='organization_import_mode']:checked")?.value || "append";
     const formData = new FormData();
     formData.append("file", selectedCsvFile);
-    const response = await fetch("/api/admin/organizations/import", {
+    const response = await fetch(`/api/admin/organizations/import?mode=${encodeURIComponent(importMode)}`, {
       method: "POST",
-      headers: { "X-Employee-Id": "admin001" },
+      headers: authHeaders(),
       body: formData,
     });
     if (!response.ok) {
-      container.querySelector("[data-import-error]").textContent = `CSV 저장 실패: ${response.status}`;
+      container.querySelector("[data-import-error]").textContent = await importErrorMessage(response, "CSV 저장 실패");
       return;
     }
     await renderOrganizationManager(container);

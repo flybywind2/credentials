@@ -14,6 +14,7 @@ from backend.services.approver_scope import org_matches_user_scope
 router = APIRouter(prefix="/part-members", tags=["part-members"])
 
 CSV_HEADERS = {"파트명", "이름", "knox_id"}
+IMPORT_MODES = {"append", "replace"}
 
 
 def _serialize(member: PartMember) -> dict:
@@ -24,6 +25,13 @@ def _serialize(member: PartMember) -> dict:
         "name": member.name,
         "knox_id": member.knox_id,
     }
+
+
+def _validate_import_mode(mode: str | None) -> str:
+    normalized = (mode or "append").strip().lower()
+    if normalized not in IMPORT_MODES:
+        raise HTTPException(status_code=400, detail="mode must be append or replace")
+    return normalized
 
 
 def _target_org_id(user: dict, org_id: int | None) -> int:
@@ -112,6 +120,33 @@ def _members_from_csv_for_all(db: Session, raw: bytes) -> list[PartMember]:
     return list(members_by_key.values())
 
 
+def _member_key(member: PartMember) -> tuple[int, str, str]:
+    return (member.organization_id, member.part_name, member.knox_id)
+
+
+def _upsert_part_members(db: Session, members: list[PartMember]) -> list[PartMember]:
+    if not members:
+        return []
+    organization_ids = {member.organization_id for member in members}
+    existing_by_key = {
+        _member_key(member): member
+        for member in db.scalars(
+            select(PartMember).where(PartMember.organization_id.in_(organization_ids))
+        ).all()
+    }
+    imported_members = []
+    for member in members:
+        existing = existing_by_key.get(_member_key(member))
+        if existing is None:
+            db.add(member)
+            imported_members.append(member)
+            existing_by_key[_member_key(member)] = member
+            continue
+        existing.name = member.name
+        imported_members.append(existing)
+    return imported_members
+
+
 @router.get("")
 def list_part_members(
     db: Annotated[Session, Depends(get_db)],
@@ -143,24 +178,31 @@ async def import_part_members(
     file: UploadFile = File(...),
     org_id: int | None = None,
     scope: str | None = None,
+    mode: str | None = None,
 ):
     require_admin(user)
+    import_mode = _validate_import_mode(mode)
     raw = await file.read()
     if scope == "all":
         members = _members_from_csv_for_all(db, raw)
-        db.execute(delete(PartMember))
+        if import_mode == "replace":
+            db.execute(delete(PartMember))
     else:
         target_org_id = _target_org_id(user, org_id)
         if db.get(Organization, target_org_id) is None:
             raise HTTPException(status_code=404, detail="Organization not found")
         members = _members_from_csv(raw, target_org_id)
-        db.execute(delete(PartMember).where(PartMember.organization_id == target_org_id))
-    for member in members:
-        db.add(member)
+        if import_mode == "replace":
+            db.execute(delete(PartMember).where(PartMember.organization_id == target_org_id))
+    imported_members = members if import_mode == "replace" else _upsert_part_members(db, members)
+    if import_mode == "replace":
+        for member in imported_members:
+            db.add(member)
     db.commit()
-    for member in members:
+    for member in imported_members:
         db.refresh(member)
     return {
-        "imported_count": len(members),
-        "members": [_serialize(member) for member in members],
+        "mode": import_mode,
+        "imported_count": len(imported_members),
+        "members": [_serialize(member) for member in imported_members],
     }

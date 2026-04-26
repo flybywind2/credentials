@@ -33,3 +33,10 @@ test("organization manager renders paginated organization rows", () => {
   assert.match(organizationAdminSource, /paginateItems/);
   assert.match(organizationAdminSource, /data-organization-pagination/);
 });
+
+test("organization manager sends selected CSV import mode", () => {
+  assert.match(organizationAdminSource, /name="organization_import_mode"/);
+  assert.match(organizationAdminSource, /value="append"/);
+  assert.match(organizationAdminSource, /value="replace"/);
+  assert.match(organizationAdminSource, /\/api\/admin\/organizations\/import\?mode=/);
+});

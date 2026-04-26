@@ -4,12 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.dependencies import get_current_user, require_admin
-from backend.models import Organization
+from backend.models import ApprovalRequest, Organization, PartMember, TaskEntry, User
 from backend.services.approver_scope import approver_level_for_user, scope_condition_for_user
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -144,10 +144,19 @@ CSV_FIELD_MAP = {
     "파트장명": "part_head_name",
     "파트장ID": "part_head_id",
 }
+IMPORT_MODES = {"append", "replace"}
+ORGANIZATION_KEY_FIELDS = ("division_name", "team_name", "group_name", "part_name")
 
 
 def _clean_text(value: str | None) -> str | None:
     return _clean_scope_text(value)
+
+
+def _validate_import_mode(mode: str | None) -> str:
+    normalized = (mode or "append").strip().lower()
+    if normalized not in IMPORT_MODES:
+        raise HTTPException(status_code=400, detail="mode must be append or replace")
+    return normalized
 
 
 def _org_type_from_data(data: dict) -> str:
@@ -169,11 +178,41 @@ def _normalize_organization_data(data: dict, include_missing_division_heads: boo
     return normalized
 
 
-def _organization_from_csv_row(row: dict[str, str]) -> Organization:
+def _organization_key(data: dict | Organization) -> tuple[str, str, str, str]:
+    return tuple(
+        (getattr(data, field, None) if isinstance(data, Organization) else data.get(field)) or ""
+        for field in ORGANIZATION_KEY_FIELDS
+    )
+
+
+def _organization_data_from_csv_row(row: dict[str, str]) -> dict:
     data = {target: _clean_text(row.get(source)) for source, target in CSV_FIELD_MAP.items()}
     data["org_type"] = _org_type_from_data(data)
-    data = _normalize_organization_data(data)
-    return Organization(**data)
+    return _normalize_organization_data(data)
+
+
+def _update_organization(org: Organization, data: dict) -> Organization:
+    for key, value in data.items():
+        setattr(org, key, value)
+    return org
+
+
+def _referenced_organization_ids(db: Session, organization_ids: list[int]) -> set[int]:
+    if not organization_ids:
+        return set()
+    referenced: set[int] = set()
+    for column in (User.organization_id, TaskEntry.organization_id, ApprovalRequest.organization_id):
+        referenced.update(
+            org_id
+            for org_id in db.scalars(select(column).where(column.in_(organization_ids))).all()
+            if org_id is not None
+        )
+    return referenced
+
+
+def _stale_organizations_blocking_replace(db: Session, stale_organizations: list[Organization]) -> list[Organization]:
+    referenced_ids = _referenced_organization_ids(db, [org.id for org in stale_organizations])
+    return [org for org in stale_organizations if org.id in referenced_ids]
 
 
 @router.get("")
@@ -216,8 +255,10 @@ async def import_organizations(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[dict, Depends(get_current_user)],
     file: UploadFile = File(...),
+    mode: str | None = None,
 ):
     require_admin(user)
+    import_mode = _validate_import_mode(mode)
     raw = await file.read()
     text = raw.decode("utf-8-sig")
     reader = csv.DictReader(StringIO(text))
@@ -225,17 +266,56 @@ async def import_organizations(
     if not reader.fieldnames or not required_headers.issubset(set(reader.fieldnames)):
         raise HTTPException(status_code=400, detail="Invalid organization CSV headers")
 
-    organizations = []
+    imported_data_by_key = {}
     for row in reader:
-        org = _organization_from_csv_row(row)
-        db.add(org)
+        data = _organization_data_from_csv_row(row)
+        imported_data_by_key[_organization_key(data)] = data
+
+    existing_organizations = db.scalars(select(Organization).order_by(Organization.id)).all()
+    existing_by_key: dict[tuple[str, str, str, str], list[Organization]] = {}
+    for org in existing_organizations:
+        existing_by_key.setdefault(_organization_key(org), []).append(org)
+
+    organizations = []
+    matched_existing_ids = set()
+    for key, data in imported_data_by_key.items():
+        existing = existing_by_key.get(key, [])
+        if existing:
+            org = _update_organization(existing[0], data)
+            matched_existing_ids.add(org.id)
+        else:
+            org = Organization(**data)
+            db.add(org)
         organizations.append(org)
+
+    deleted_count = 0
+    if import_mode == "replace":
+        stale_organizations = [
+            org
+            for org in existing_organizations
+            if org.id not in matched_existing_ids
+        ]
+        blocking_organizations = _stale_organizations_blocking_replace(db, stale_organizations)
+        if blocking_organizations:
+            part_names = ", ".join(org.part_name for org in blocking_organizations[:10])
+            raise HTTPException(
+                status_code=409,
+                detail=f"업무/사용자/승인 이력이 있는 조직은 전체 덮어쓰기에서 삭제할 수 없습니다: {part_names}",
+            )
+        stale_ids = [org.id for org in stale_organizations]
+        if stale_ids:
+            db.execute(delete(PartMember).where(PartMember.organization_id.in_(stale_ids)))
+            for org in stale_organizations:
+                db.delete(org)
+            deleted_count = len(stale_ids)
     db.commit()
     for org in organizations:
         db.refresh(org)
 
     return {
+        "mode": import_mode,
         "imported_count": len(organizations),
+        "deleted_count": deleted_count,
         "organizations": [_serialize(org) for org in organizations],
     }
 

@@ -22,3 +22,10 @@ test("part member manager supports selected organization and all-part CSV upload
   assert.match(partMemberAdminSource, /paginateItems/);
   assert.match(partMemberAdminSource, /data-part-member-pagination/);
 });
+
+test("part member manager sends selected CSV import mode", () => {
+  assert.match(partMemberAdminSource, /name="part_member_import_mode"/);
+  assert.match(partMemberAdminSource, /value="append"/);
+  assert.match(partMemberAdminSource, /value="replace"/);
+  assert.match(partMemberAdminSource, /mode=/);
+});

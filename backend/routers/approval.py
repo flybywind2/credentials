@@ -48,6 +48,7 @@ APPROVAL_STATUS_LABELS = {
     "PENDING": "승인대기",
     "APPROVED": "승인완료",
     "REJECTED": "반려",
+    "CANCELLED": "요청취소",
 }
 UNIT_TYPE_LABELS = {
     "PART": "파트",
@@ -237,7 +238,7 @@ def _task_counts_by_org(db: Session, organization_ids: list[int]) -> dict[int, d
 
 
 def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
-    status_counts = {"PENDING": 0, "APPROVED": 0, "REJECTED": 0}
+    status_counts = {"PENDING": 0, "APPROVED": 0, "REJECTED": 0, "CANCELLED": 0}
     for request in requests:
         if request.status in status_counts:
             status_counts[request.status] += 1
@@ -247,6 +248,8 @@ def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
         status = "REJECTED"
     elif status_counts["APPROVED"]:
         status = "APPROVED"
+    elif status_counts["CANCELLED"]:
+        status = "CANCELLED"
     else:
         status = "NOT_REQUESTED"
     latest = max(
@@ -260,6 +263,7 @@ def _approval_summary_for_requests(requests: list[ApprovalRequest]) -> dict:
         "pending_count": status_counts["PENDING"],
         "approved_count": status_counts["APPROVED"],
         "rejected_count": status_counts["REJECTED"],
+        "cancelled_count": status_counts["CANCELLED"],
         "latest_requested_at": latest.created_at.isoformat() if latest and latest.created_at else None,
         "current_step": latest.current_step if latest else None,
         "total_steps": latest.total_steps if latest else None,
@@ -477,6 +481,35 @@ def _ensure_can_act(user: dict, request: ApprovalRequest, step: ApprovalStep, db
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 
+def _can_view_approval_history(
+    user: dict,
+    request: ApprovalRequest,
+    steps: list[ApprovalStep],
+    db: Session,
+) -> bool:
+    return any(_can_act_on_step(user, request, step, db) for step in steps)
+
+
+def _ensure_can_cancel(user: dict, request: ApprovalRequest, db: Session) -> None:
+    if user["role"] == "ADMIN":
+        return
+    requester = db.get(User, request.requested_by)
+    if requester and requester.employee_id == user["employee_id"]:
+        return
+    raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+
+def _approval_has_started(db: Session, request: ApprovalRequest) -> bool:
+    return db.scalar(
+        select(func.count(ApprovalStep.id))
+        .where(ApprovalStep.approval_request_id == request.id)
+        .where(
+            (ApprovalStep.status != "PENDING")
+            | (ApprovalStep.acted_at.is_not(None))
+        )
+    ) > 0
+
+
 def _request_tasks(db: Session, request: ApprovalRequest) -> list[TaskEntry]:
     return db.scalars(
         select(TaskEntry)
@@ -590,6 +623,45 @@ def approve_request(
     return _serialize_request(db, request)
 
 
+@router.post("/{approval_id}/cancel")
+def cancel_request(
+    approval_id: int,
+    user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    request = db.get(ApprovalRequest, approval_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    if request.status != "PENDING":
+        raise HTTPException(status_code=400, detail="Approval request is not pending")
+    _ensure_can_cancel(user, request, db)
+    if _approval_has_started(db, request):
+        raise HTTPException(status_code=400, detail="Approval request is already in review")
+
+    request.status = "CANCELLED"
+    for step in db.scalars(
+        select(ApprovalStep).where(ApprovalStep.approval_request_id == request.id)
+    ).all():
+        step.status = "CANCELLED"
+        step.acted_at = datetime.now(timezone.utc)
+    for task in db.scalars(
+        select(TaskEntry).where(TaskEntry.organization_id == request.organization_id)
+    ).all():
+        if task.status == "SUBMITTED":
+            task.status = "DRAFT"
+
+    log_audit(
+        db,
+        action="APPROVAL_CANCEL",
+        user=user,
+        target_type="ApprovalRequest",
+        target_id=request.id,
+    )
+    db.commit()
+    db.refresh(request)
+    return _serialize_request(db, request)
+
+
 @router.get("/{approval_id}/history")
 def read_approval_history(
     approval_id: int,
@@ -603,9 +675,7 @@ def read_approval_history(
     steps = db.scalars(
         select(ApprovalStep).where(ApprovalStep.approval_request_id == approval_id)
     ).all()
-    if user["role"] != "ADMIN" and user["employee_id"] not in {
-        step.approver_employee_id for step in steps
-    }:
+    if not _can_view_approval_history(user, request, steps, db):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return _serialize_request(db, request)
 
@@ -715,6 +785,16 @@ def submit_approval(
     tasks = db.scalars(select(TaskEntry).where(TaskEntry.organization_id == org_id)).all()
     if not tasks:
         raise HTTPException(status_code=400, detail="No tasks to submit")
+    if any(task.status == "SUBMITTED" for task in tasks):
+        active_request = db.scalar(
+            select(ApprovalRequest)
+            .where(ApprovalRequest.organization_id == org_id)
+            .where(ApprovalRequest.status.in_(("PENDING", "IN_PROGRESS")))
+            .order_by(ApprovalRequest.created_at.desc(), ApprovalRequest.id.desc())
+            .limit(1)
+        )
+        if active_request is not None:
+            raise HTTPException(status_code=400, detail="Pending approval request already exists")
 
     validation_errors = _submission_errors(tasks)
     if validation_errors:

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  approvalActionForStatus,
   deleteConfirmationMessage,
   editableOrganizationsForUser,
   firstErrorRow,
@@ -50,6 +51,9 @@ test("spreadsheet source includes approval confirmation and excel preview flow",
   assert.match(spreadsheetSource, /data-action="input-guide"/);
   assert.match(spreadsheetSource, /업무 입력 가이드/);
   assert.match(spreadsheetSource, /승인 요청 전 확인/);
+  assert.match(spreadsheetSource, /data-action="\$\{approvalAction\.action\}"/);
+  assert.match(spreadsheetSource, /cancel-approval/);
+  assert.match(spreadsheetSource, /\/api\/approvals\/\$\{partStatus\.active_approval_id\}\/cancel/);
   assert.match(spreadsheetSource, /data-action="preview-save-selected"/);
   assert.match(spreadsheetSource, /data-action="preview-save-all"/);
 });
@@ -60,6 +64,17 @@ test("spreadsheet paste modal uses a grid-oriented Excel paste flow", () => {
   assert.match(spreadsheetSource, /text\/html/);
   assert.match(spreadsheetSource, /data-paste-dropzone/);
   assert.doesNotMatch(spreadsheetSource, /TSV 데이터/);
+});
+
+test("approvalActionForStatus switches to cancel while a pending request is active", () => {
+  assert.deepEqual(
+    approvalActionForStatus({ approval_status: "PENDING", active_approval_id: 10 }),
+    { action: "cancel-approval", label: "요청 취소", className: "danger-button" },
+  );
+  assert.deepEqual(
+    approvalActionForStatus({ approval_status: "CANCELLED", active_approval_id: null }),
+    { action: "submit-approval", label: "승인 요청", className: "primary-button" },
+  );
 });
 
 test("editableOrganizationsForUser returns subordinate parts for approvers", () => {

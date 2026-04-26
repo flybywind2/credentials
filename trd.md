@@ -202,7 +202,7 @@ project-root/
 | id | INT | PK, AUTO_INCREMENT | 승인 요청 ID |
 | organization_id | INT | FK → organizations.id, NOT NULL | 대상 조직 |
 | requested_by | INT | FK → users.id, NOT NULL | 요청자 |
-| status | ENUM('PENDING','IN_PROGRESS','APPROVED','REJECTED') | DEFAULT 'PENDING' | 전체 상태 |
+| status | ENUM('PENDING','IN_PROGRESS','APPROVED','REJECTED','CANCELLED') | DEFAULT 'PENDING' | 전체 상태 |
 | current_step | INT | DEFAULT 1 | 현재 승인 단계 |
 | total_steps | INT | NOT NULL | 전체 승인 단계 수 |
 | created_at | DATETIME | DEFAULT NOW() | 요청일시 |
@@ -218,7 +218,7 @@ project-root/
 | approver_employee_id | VARCHAR(20) | NOT NULL | 승인자 사번ID |
 | approver_name | VARCHAR(50) | NOT NULL | 승인자명 |
 | approver_role | VARCHAR(50) | NOT NULL | 승인자 직책 |
-| status | ENUM('WAITING','APPROVED','REJECTED') | DEFAULT 'WAITING' | 단계 상태 |
+| status | ENUM('PENDING','APPROVED','REJECTED','CANCELLED') | DEFAULT 'PENDING' | 단계 상태 |
 | reject_reason | TEXT | NULLABLE | 반려 사유 |
 | acted_at | DATETIME | NULLABLE | 처리일시 |
 
@@ -264,7 +264,7 @@ project-root/
 
 ### 3.5 승인 API
 
-`POST /api/approvals/submit?org_id={id}` — 파트 단위 승인 요청 제출. `GET /api/approvals/pending` — 내 승인 대기 목록 조회. `POST /api/approvals/{id}/approve` — 승인 처리. `POST /api/approvals/{id}/reject` — 반려 처리 (body: reject_reason 필수). `GET /api/approvals/{id}/history` — 승인 이력 조회.
+`POST /api/approvals/submit?org_id={id}` — 파트 단위 승인 요청 제출. `POST /api/approvals/{id}/cancel` — 승인 처리 시작 전 승인 요청 취소. `GET /api/approvals/pending` — 내 승인 대기 목록 조회. `POST /api/approvals/{id}/approve` — 승인 처리. `POST /api/approvals/{id}/reject` — 반려 처리 (body: reject_reason 필수). `GET /api/approvals/{id}/history` — 승인 이력 조회.
 
 ### 3.6 대시보드 API
 

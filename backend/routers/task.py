@@ -556,10 +556,30 @@ def read_part_status(
     counts = {"UPLOADED": 0, "DRAFT": 0, "SUBMITTED": 0, "APPROVED": 0, "REJECTED": 0}
     for status_name, count in rows:
         counts[status_name] = count
+    latest_request = db.scalar(
+        select(ApprovalRequest)
+        .where(ApprovalRequest.organization_id == target_org_id)
+        .order_by(ApprovalRequest.created_at.desc(), ApprovalRequest.id.desc())
+        .limit(1)
+    )
+    active_request = None
+    if counts["SUBMITTED"]:
+        active_request = db.scalar(
+            select(ApprovalRequest)
+            .where(ApprovalRequest.organization_id == target_org_id)
+            .where(ApprovalRequest.status.in_(("PENDING", "IN_PROGRESS")))
+            .order_by(ApprovalRequest.created_at.desc(), ApprovalRequest.id.desc())
+            .limit(1)
+        )
     return {
         "organization_id": target_org_id,
         "total_tasks": sum(counts.values()),
         "status_counts": counts,
+        "approval_id": latest_request.id if latest_request else None,
+        "approval_status": latest_request.status if latest_request else "NOT_REQUESTED",
+        "active_approval_id": active_request.id if active_request else None,
+        "current_step": latest_request.current_step if latest_request else None,
+        "total_steps": latest_request.total_steps if latest_request else None,
     }
 
 

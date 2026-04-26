@@ -10,7 +10,7 @@ class ApprovalRequest(Base):
     __tablename__ = "approval_requests"
     __table_args__ = (
         CheckConstraint(
-            "status in ('PENDING', 'IN_PROGRESS', 'APPROVED', 'REJECTED')",
+            "status in ('PENDING', 'IN_PROGRESS', 'APPROVED', 'REJECTED', 'CANCELLED')",
             name="ck_approval_requests_status",
         ),
         CheckConstraint("current_step >= 1", name="ck_approval_requests_current_step"),
@@ -40,7 +40,7 @@ class ApprovalStep(Base):
     __tablename__ = "approval_steps"
     __table_args__ = (
         CheckConstraint(
-            "status in ('PENDING', 'APPROVED', 'REJECTED')",
+            "status in ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')",
             name="ck_approval_steps_status",
         ),
         CheckConstraint("step_order >= 1", name="ck_approval_steps_step_order"),

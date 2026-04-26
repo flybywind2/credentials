@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from backend.database import Base
-from backend.models import ApprovalRequest, Organization, TaskEntry, User
+from backend.models import ApprovalRequest, ApprovalStep, Organization, TaskEntry, User
 
 
 @pytest.fixture()
@@ -123,3 +123,39 @@ def test_approval_request_rejects_invalid_step_count(db_session):
 
     with pytest.raises(IntegrityError):
         db_session.commit()
+
+
+def test_approval_request_and_step_accept_cancelled_status(db_session):
+    org = Organization(
+        division_name="취소실",
+        division_head_name="취소실장",
+        division_head_id="cancel-d1",
+        part_name="취소파트",
+        part_head_name="취소파트장",
+        part_head_id="cancel-p1",
+        org_type="DIV_DIRECT",
+    )
+    user = User(employee_id="cancel-u1", name="취소사용자", role="INPUTTER")
+    db_session.add_all([org, user])
+    db_session.flush()
+    request = ApprovalRequest(
+        organization_id=org.id,
+        requested_by=user.id,
+        status="CANCELLED",
+        current_step=1,
+        total_steps=1,
+    )
+    db_session.add(request)
+    db_session.flush()
+    db_session.add(
+        ApprovalStep(
+            approval_request_id=request.id,
+            step_order=1,
+            approver_employee_id="cancel-d1",
+            approver_name="취소실장",
+            approver_role="실장",
+            status="CANCELLED",
+        )
+    )
+
+    db_session.commit()

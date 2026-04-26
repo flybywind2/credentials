@@ -166,6 +166,13 @@ function renderOrganizationSelector(organizations, selectedOrganization) {
   `;
 }
 
+export function approvalActionForStatus(partStatus = {}) {
+  if (partStatus.approval_status === "PENDING" && partStatus.active_approval_id) {
+    return { action: "cancel-approval", label: "요청 취소", className: "danger-button" };
+  }
+  return { action: "submit-approval", label: "승인 요청", className: "primary-button" };
+}
+
 function classificationSummary(rows) {
   return rows.reduce((summary, row) => {
     const isConfidential = Boolean(row.is_confidential);
@@ -777,6 +784,7 @@ export async function renderSpreadsheet(container, options = {}) {
   let showRejectedOnly = false;
   const rejectedTasks = filterRejectedTasks(tasks, rejection);
   const prioritizedTasks = prioritizeRejectedTasks(tasks, rejection);
+  const approvalAction = approvalActionForStatus(partStatus);
 
   function visibleTasks() {
     return showRejectedOnly ? rejectedTasks : prioritizedTasks;
@@ -799,7 +807,7 @@ export async function renderSpreadsheet(container, options = {}) {
             <input id="task-excel-import" type="file" accept=".xlsx" data-action="excel-import">
           </label>
         <button type="button" class="secondary-button" data-action="paste-preview">Excel 붙여넣기</button>
-          <button type="button" class="primary-button" data-action="submit-approval">승인 요청</button>
+          <button type="button" class="${approvalAction.className}" data-action="${approvalAction.action}">${approvalAction.label}</button>
         </div>
       </div>
       ${rejection.has_rejection ? `
@@ -959,7 +967,18 @@ export async function renderSpreadsheet(container, options = {}) {
     event.target.value = "";
   });
 
-  container.querySelector("[data-action='submit-approval']").addEventListener("click", async () => {
+  container.querySelector("[data-action='cancel-approval']")?.addEventListener("click", async () => {
+    const confirmed = globalThis.confirm
+      ? globalThis.confirm("승인 요청을 취소하시겠습니까?")
+      : true;
+    if (!confirmed) {
+      return;
+    }
+    await fetchJson(`/api/approvals/${partStatus.active_approval_id}/cancel`, { method: "POST" });
+    await renderSpreadsheet(container, { ...options, selectedOrgId: orgId });
+  });
+
+  container.querySelector("[data-action='submit-approval']")?.addEventListener("click", async () => {
     const uploadedCount = tasks.filter((task) => task.status === "UPLOADED").length;
     if (uploadedCount) {
       container.querySelector("[data-validation-panel]").innerHTML = renderUploadedBlockPanel(uploadedCount);

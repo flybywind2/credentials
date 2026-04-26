@@ -8,6 +8,7 @@ from backend.database import Base
 from backend.models import (
     ApprovalRequest,
     ApprovalStep,
+    ApprovalTaskReview,
     AuditLog,
     ConfidentialQuestion,
     NationalTechQuestion,
@@ -40,6 +41,7 @@ def initialize_database(database_url: str = "sqlite:///./dev.db", reset: bool = 
     Base.metadata.create_all(bind=engine)
     _ensure_incremental_columns(engine)
     _ensure_uploaded_status_constraint(engine)
+    _ensure_approval_cancelled_status_constraint(engine)
 
     session = sessionmaker(bind=engine)()
     try:
@@ -227,6 +229,86 @@ def _ensure_uploaded_status_constraint(engine) -> None:
             text(f"INSERT INTO task_entries ({column_list}) SELECT {column_list} FROM {old_table}")
         )
         connection.execute(text(f"DROP TABLE {old_table}"))
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _copy_shared_columns(connection, table, old_table_name: str) -> None:
+    old_columns = {
+        row[1]
+        for row in connection.execute(text(f"PRAGMA table_info({old_table_name})")).all()
+    }
+    new_columns = {
+        row[1]
+        for row in connection.execute(text(f"PRAGMA table_info({table.name})")).all()
+    }
+    shared_columns = [
+        column.name
+        for column in table.columns
+        if column.name in old_columns and column.name in new_columns
+    ]
+    if not shared_columns:
+        return
+    column_list = ", ".join(shared_columns)
+    connection.execute(
+        text(f"INSERT INTO {table.name} ({column_list}) SELECT {column_list} FROM {old_table_name}")
+    )
+
+
+def _drop_sqlite_indexes(connection, table_name: str) -> None:
+    for index_name in connection.execute(
+        text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=:table_name AND sql IS NOT NULL"),
+        {"table_name": table_name},
+    ).scalars():
+        connection.execute(text(f"DROP INDEX {index_name}"))
+
+
+def _ensure_approval_cancelled_status_constraint(engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if not {"approval_requests", "approval_steps"}.issubset(table_names):
+        return
+    with engine.begin() as connection:
+        request_sql = connection.execute(
+            text("SELECT sql FROM sqlite_master WHERE type='table' AND name='approval_requests'")
+        ).scalar_one_or_none()
+        step_sql = connection.execute(
+            text("SELECT sql FROM sqlite_master WHERE type='table' AND name='approval_steps'")
+        ).scalar_one_or_none()
+        if (
+            request_sql
+            and step_sql
+            and "CANCELLED" in request_sql
+            and "CANCELLED" in step_sql
+        ):
+            return
+
+        old_reviews = "approval_task_reviews_old_cancelled_migration"
+        old_steps = "approval_steps_old_cancelled_migration"
+        old_requests = "approval_requests_old_cancelled_migration"
+        connection.execute(text("PRAGMA foreign_keys=OFF"))
+        for old_table in (old_reviews, old_steps, old_requests):
+            connection.execute(text(f"DROP TABLE IF EXISTS {old_table}"))
+        if "approval_task_reviews" in table_names:
+            connection.execute(text(f"ALTER TABLE approval_task_reviews RENAME TO {old_reviews}"))
+        connection.execute(text(f"ALTER TABLE approval_steps RENAME TO {old_steps}"))
+        connection.execute(text(f"ALTER TABLE approval_requests RENAME TO {old_requests}"))
+        for old_table in (old_reviews, old_steps, old_requests):
+            _drop_sqlite_indexes(connection, old_table)
+
+        ApprovalRequest.__table__.create(bind=connection)
+        ApprovalStep.__table__.create(bind=connection)
+        if "approval_task_reviews" in table_names:
+            ApprovalTaskReview.__table__.create(bind=connection)
+
+        _copy_shared_columns(connection, ApprovalRequest.__table__, old_requests)
+        _copy_shared_columns(connection, ApprovalStep.__table__, old_steps)
+        if "approval_task_reviews" in table_names:
+            _copy_shared_columns(connection, ApprovalTaskReview.__table__, old_reviews)
+
+        for old_table in (old_reviews, old_steps, old_requests):
+            connection.execute(text(f"DROP TABLE IF EXISTS {old_table}"))
         connection.execute(text("PRAGMA foreign_keys=ON"))
 
 

@@ -79,6 +79,10 @@ def test_managed_group_approver_sees_assigned_group_pending_request():
             "/api/approvals/pending",
             headers={"X-Employee-Id": managed_group_id},
         )
+        history_response = client.get(
+            f"/api/approvals/{approval_id}/history",
+            headers={"X-Employee-Id": managed_group_id},
+        )
         approve_response = client.post(
             f"/api/approvals/{approval_id}/approve",
             headers={"X-Employee-Id": managed_group_id},
@@ -88,6 +92,8 @@ def test_managed_group_approver_sees_assigned_group_pending_request():
         assert any(row["approval_status"] == "PENDING" for row in status_response.json()["rows"])
         assert pending_response.status_code == 200
         assert approval_id in {item["id"] for item in pending_response.json()}
+        assert history_response.status_code == 200
+        assert history_response.json()["id"] == approval_id
         assert approve_response.status_code == 200
         assert approve_response.json()["current_step"] == 2
     finally:

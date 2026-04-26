@@ -148,6 +148,7 @@ body {
 
 .role-nav button,
 .primary-button,
+.danger-button,
 .secondary-button,
 .icon-button {
   min-height: 32px;
@@ -250,6 +251,14 @@ body {
   box-shadow: 0 1px 2px rgb(93 59 182 / 16%);
 }
 
+.danger-button {
+  padding: 0 14px;
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+  box-shadow: 0 1px 2px rgb(198 40 40 / 16%);
+}
+
 .secondary-button {
   padding: 0 14px;
   background: #fff;
@@ -260,6 +269,11 @@ body {
 .primary-button:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+.danger-button:hover {
+  background: #a91f1f;
+  border-color: #a91f1f;
 }
 
 .secondary-button:hover,
